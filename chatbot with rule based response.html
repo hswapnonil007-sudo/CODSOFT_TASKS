@@ -1,0 +1,2212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Parlance — a rule-based chatbot you can inspect</title>
+<meta name="description" content="Parlance is a rule-based chatbot: no model, no network, no training data. Every reply traces back to a pattern you can read.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ════════════════════════════════════════════════════════════════════
+   PARLANCE — design tokens
+   Concept: a printed-circuit-board / signal-path visual language.
+   A rule-based engine is, literally, a board of traces and junctions —
+   a message is a signal that travels until a rule catches it. The
+   palette, borders and category "trace" colours all come from that.
+   ════════════════════════════════════════════════════════════════════ */
+:root {
+  --paper: #EEF0E9;      /* silkscreen-white background */
+  --paper-dim: #E3E6DC;  /* slightly recessed panels on paper */
+  --ink: #131A17;        /* near-black green-black text */
+  --ink-soft: #4B5750;   /* secondary text */
+  --board: #0E2E24;      /* deep PCB green — header, footer, inverted */
+  --board-soft: #164737; /* board surface, one step lighter */
+  --signal: #E3A438;     /* amber — the one bold "live" accent */
+  --signal-ink: #4A2F04; /* text on signal-amber fills */
+  --trace: #2F7566;      /* mid teal-green — structural lines, borders */
+  --trace-soft: #A9C2BB; /* faint trace on paper */
+  --alert: #B23B3B;      /* muted signal red — safety net, destructive */
+  --alert-soft: #F4DCDA;
+  --signal-tint-ink: var(--signal-ink); /* text sitting on a low-opacity signal tint */
+
+  /* category trace colours — small, meaningful ticks, not decoration */
+  --cat-conversation: #2F7566;
+  --cat-time: #3E6FA6;
+  --cat-maths: #8A5FBF;
+  --cat-focus: #B2792E;
+  --cat-utilities: #4B8B5A;
+  --cat-fun: #C0577A;
+  --cat-learn: #5A6B8C;
+
+  --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+  --radius: 3px;
+  --radius-lg: 5px;
+  --border: 1px solid var(--trace-soft);
+  --shadow: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0B1210;
+    --paper-dim: #101A17;
+    --ink: #E7ECE8;
+    --ink-soft: #9FB0A8;
+    --board: #081C15;
+    --board-soft: #0F2A20;
+    --trace: #3E8C7B;
+    --trace-soft: #24382F;
+    --alert-soft: #2B1616;
+    --signal-tint-ink: #F3D9A6;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0B1210;
+  --paper-dim: #101A17;
+  --ink: #E7ECE8;
+  --ink-soft: #9FB0A8;
+  --board: #081C15;
+  --board-soft: #0F2A20;
+  --trace: #3E8C7B;
+  --trace-soft: #24382F;
+  --alert-soft: #2B1616;
+  --signal-tint-ink: #F3D9A6;
+}
+
+* { box-sizing: border-box; }
+html {
+  scroll-padding-top: env(safe-area-inset-top, 0px);
+}
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 15.5px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+::selection { background: var(--signal); color: var(--signal-ink); }
+
+a { color: inherit; }
+button { font-family: inherit; cursor: pointer; }
+code, .mono { font-family: var(--mono); }
+
+/* focus visibility, always */
+:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: 2px;
+}
+
+/* ───────────── layout shell ───────────── */
+.wrap { max-width: 1180px; margin: 0 auto; padding: 0 24px; }
+
+header.top {
+  background: var(--board);
+  color: #EAF2ED; /* the board surface is dark in both themes, so its text stays fixed-light */
+  border-bottom: 1px solid var(--board-soft);
+}
+header.top .wrap {
+  display: flex; align-items: center; justify-content: space-between;
+  padding-top: calc(14px + env(safe-area-inset-top, 0px));
+  padding-bottom: 14px;
+  gap: 16px;
+}
+.brand {
+  display: flex; align-items: baseline; gap: 10px;
+  font-family: var(--mono); font-weight: 600; font-size: 17px; letter-spacing: 0.01em;
+}
+.brand .dot { color: var(--signal); }
+.brand .tag { font-family: var(--sans); font-weight: 400; font-size: 12.5px; color: #B9C7BF; }
+nav.top-nav { display: flex; gap: 4px; }
+nav.top-nav button {
+  background: transparent; border: 1px solid transparent; color: #CFE0D8;
+  font-family: var(--mono); font-size: 13px; padding: 7px 12px; border-radius: var(--radius);
+  transition: border-color .15s, color .15s;
+}
+nav.top-nav button:hover { color: var(--paper); border-color: var(--board-soft); }
+nav.top-nav button.active { color: var(--signal); border-color: var(--board-soft); background: var(--board-soft); }
+
+/* ───────────── hero ───────────── */
+.hero { padding: 46px 0 28px; }
+.hero .kicker {
+  font-family: var(--mono); font-size: 13px; color: var(--trace);
+  display: flex; align-items: center; gap: 8px; margin-bottom: 14px;
+}
+.hero .kicker .led {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--signal);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--signal) 20%, transparent);
+  animation: blink 2.4s ease-in-out infinite;
+}
+@keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .hero .kicker .led { animation: none; } }
+
+h1.headline {
+  font-family: var(--mono); font-weight: 600; font-size: clamp(28px, 4.4vw, 44px);
+  line-height: 1.18; letter-spacing: -0.01em; margin: 0 0 16px; max-width: 15ch;
+}
+.hero .sub {
+  max-width: 62ch; color: var(--ink-soft); font-size: 16.5px; margin: 0 0 26px;
+}
+.hero .sub strong { color: var(--ink); font-weight: 600; }
+
+/* signal-path diagram */
+.signal-path { display: flex; align-items: center; gap: 0; margin: 0 0 30px; max-width: 720px; }
+.signal-path .node {
+  font-family: var(--mono); font-size: 12.5px; padding: 8px 12px; border: var(--border);
+  border-radius: var(--radius); background: var(--paper-dim); white-space: nowrap; flex-shrink: 0;
+}
+.signal-path .node.hot { border-color: var(--signal); color: var(--signal-tint-ink); background: color-mix(in srgb, var(--signal) 16%, var(--paper-dim)); }
+.signal-path .wire { flex: 1; height: 1px; background: var(--trace-soft); position: relative; min-width: 24px; }
+.signal-path .wire::after {
+  content: ''; position: absolute; top: -2px; left: 0; width: 6px; height: 5px; border-radius: 50%;
+  background: var(--signal); animation: travel 3.2s linear infinite;
+}
+@keyframes travel { 0% { left: 0; opacity: 0; } 8% { opacity: 1; } 92% { opacity: 1; } 100% { left: calc(100% - 6px); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .signal-path .wire::after { animation: none; display: none; } }
+
+.try-row { display: flex; gap: 10px; max-width: 640px; }
+.try-row input {
+  flex: 1; font-family: var(--sans); font-size: 15px; padding: 12px 14px;
+  border: 1px solid var(--trace); border-radius: var(--radius); background: var(--paper); color: var(--ink);
+}
+.try-row input::placeholder { color: var(--ink-soft); }
+.btn {
+  font-family: var(--mono); font-size: 13.5px; font-weight: 600; padding: 11px 18px;
+  border-radius: var(--radius); border: 1px solid var(--ink); background: var(--ink); color: var(--paper);
+  transition: transform .1s ease, background .15s;
+}
+.btn:hover { background: var(--board); }
+.btn:active { transform: scale(.98); }
+.btn.signal { background: var(--signal); border-color: var(--signal); color: var(--signal-ink); }
+.btn.signal:hover { filter: brightness(0.95); }
+.btn.ghost { background: transparent; color: var(--ink); border-color: var(--trace-soft); }
+.btn.ghost:hover { border-color: var(--ink); }
+.btn.small { padding: 6px 11px; font-size: 12px; }
+.btn.danger { background: var(--alert); border-color: var(--alert); color: #fff; }
+
+/* spec strip */
+.specs { border-top: 1px solid var(--trace-soft); border-bottom: 1px solid var(--trace-soft); }
+.specs .wrap { display: flex; gap: 0; padding: 0; flex-wrap: wrap; }
+.specs .cell {
+  flex: 1; min-width: 150px; padding: 14px 20px; border-left: 1px solid var(--trace-soft);
+}
+.specs .cell:first-child { border-left: none; }
+.specs .cell .n { font-family: var(--mono); font-size: 20px; font-weight: 600; color: var(--trace); }
+.specs .cell .l { font-size: 12.5px; color: var(--ink-soft); }
+
+/* ───────────── main app grid ───────────── */
+main.app { padding: 28px 0 70px; }
+.grid {
+  display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 20px; align-items: start;
+}
+@media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+
+.panel {
+  background: var(--paper-dim); border: 1px solid var(--trace-soft); border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.panel .panel-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 12px 16px; border-bottom: 1px solid var(--trace-soft);
+  font-family: var(--mono); font-size: 12.5px; color: var(--ink-soft);
+}
+.panel .panel-head .title { display: flex; align-items: center; gap: 8px; color: var(--ink); font-weight: 600; }
+
+/* ── chat ── */
+#chatlog {
+  height: 560px; overflow-y: auto; padding: 18px 18px 6px;
+  display: flex; flex-direction: column; gap: 14px;
+}
+.msg { display: flex; gap: 10px; max-width: 88%; }
+.msg.user { align-self: flex-end; flex-direction: row-reverse; }
+.msg .avatar {
+  width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0; margin-top: 2px;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+}
+.msg.bot .avatar { background: var(--board); color: var(--signal); }
+.msg.user .avatar { background: var(--trace-soft); color: var(--ink); }
+.bubble {
+  border: 1px solid var(--trace-soft); border-left-width: 3px; border-radius: var(--radius);
+  padding: 10px 13px; background: var(--paper);
+}
+.msg.user .bubble { background: var(--board); color: var(--paper); border-color: var(--board-soft); border-left-width: 1px; border-right-width: 3px; border-right-color: var(--signal); }
+.bubble p { margin: 0 0 8px; }
+.bubble p:last-child { margin-bottom: 0; }
+.bubble strong { font-weight: 700; }
+.bubble code { background: color-mix(in srgb, var(--trace) 12%, transparent); padding: 1px 5px; border-radius: 2px; font-size: 13px; }
+.msg.user .bubble code { background: rgba(255,255,255,.12); }
+
+.chip-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+.chip {
+  font-family: var(--mono); font-size: 12px; padding: 5px 10px; border: 1px solid var(--trace-soft);
+  border-radius: 12px; background: var(--paper); color: var(--trace); transition: background .15s, color .15s;
+}
+.chip:hover { background: var(--trace); color: #fff; }
+.msg.user .chip {} /* chips never appear on user bubbles */
+
+.typing { display: flex; gap: 4px; padding: 4px 0; }
+.typing span { width: 5px; height: 5px; border-radius: 50%; background: var(--trace); opacity: .5; animation: bounce 1.1s infinite; }
+.typing span:nth-child(2) { animation-delay: .15s; } .typing span:nth-child(3) { animation-delay: .3s; }
+@keyframes bounce { 0%,60%,100% { transform: translateY(0); opacity: .4; } 30% { transform: translateY(-3px); opacity: 1; } }
+
+.composer { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--trace-soft); background: var(--paper-dim); }
+.composer input { flex: 1; border: 1px solid var(--trace-soft); border-radius: var(--radius); padding: 10px 12px; background: var(--paper); color: var(--ink); font-family: var(--sans); font-size: 14.5px; }
+.composer input:focus { border-color: var(--trace); }
+
+/* ── UI blocks inside bubbles ── */
+.b-kv { width: 100%; border-collapse: collapse; margin-top: 2px; }
+.b-kv td { padding: 4px 0; font-size: 14px; }
+.b-kv td:first-child { color: var(--ink-soft); padding-right: 14px; white-space: nowrap; }
+.b-kv td:last-child { font-family: var(--mono); text-align: right; }
+.msg.user .b-kv td:first-child { color: #C7D6CD; }
+
+.b-result { margin-top: 2px; }
+.b-result .lbl { font-size: 13px; color: var(--ink-soft); margin-bottom: 3px; }
+.msg.user .b-result .lbl { color: #C7D6CD; }
+.b-result .row { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.b-result .val { font-family: var(--mono); font-size: 22px; font-weight: 600; }
+.b-result.small .val { font-size: 15px; font-weight: 500; }
+.b-result .sub { font-size: 12.5px; color: var(--ink-soft); margin-top: 3px; }
+.copy-btn {
+  font-family: var(--mono); font-size: 11px; border: 1px solid var(--trace-soft); background: transparent;
+  color: var(--trace); padding: 3px 8px; border-radius: 10px;
+}
+.copy-btn:hover { background: var(--trace); color: #fff; }
+
+.b-list { margin: 2px 0 0; padding-left: 20px; }
+.b-list li { margin-bottom: 4px; }
+.b-list li:last-child { margin-bottom: 0; }
+
+.b-help { margin-top: 4px; display: flex; flex-direction: column; gap: 10px; }
+.b-help .sec .h { font-family: var(--mono); font-size: 12px; color: var(--trace); margin-bottom: 5px; }
+.msg.user .b-help .h { color: var(--signal); }
+
+.b-todos { margin-top: 4px; display: flex; flex-direction: column; gap: 5px; }
+.todo-row { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.todo-row input[type=checkbox] { accent-color: var(--trace); width: 15px; height: 15px; flex-shrink: 0; }
+.todo-row.done span { text-decoration: line-through; color: var(--ink-soft); }
+.todo-row .del { margin-left: auto; background: none; border: none; color: var(--ink-soft); font-size: 12px; font-family: var(--mono); }
+.todo-row .del:hover { color: var(--alert); }
+.todo-empty { color: var(--ink-soft); font-size: 13.5px; font-style: italic; }
+
+.b-password { margin-top: 4px; }
+.pw-value { font-family: var(--mono); font-size: 18px; letter-spacing: .02em; word-break: break-all; padding: 8px 10px; background: var(--paper-dim); border: 1px solid var(--trace-soft); border-radius: var(--radius); }
+.msg.user .pw-value { background: rgba(255,255,255,.08); border-color: var(--board-soft); }
+.pw-meta { display: flex; align-items: center; gap: 10px; margin-top: 6px; font-size: 12px; color: var(--ink-soft); }
+.pw-strength { font-family: var(--mono); font-weight: 600; }
+
+.b-dice { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 2px; }
+.die { width: 34px; height: 34px; border: 1.5px solid var(--ink); border-radius: 7px; display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-weight: 700; font-size: 15px; background: var(--paper); color: var(--ink); }
+.msg.user .die { background: var(--paper); }
+.b-dice .total { font-family: var(--mono); font-size: 13px; color: var(--ink-soft); margin-left: 4px; }
+.msg.user .b-dice .total { color: #C7D6CD; }
+
+.b-coin { display: flex; align-items: center; gap: 10px; margin-top: 2px; }
+.coin-face { width: 46px; height: 46px; border-radius: 50%; border: 2px solid var(--signal); display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-weight: 700; font-size: 11px; background: color-mix(in srgb, var(--signal) 14%, transparent); }
+
+.b-color { display: flex; align-items: center; gap: 12px; margin-top: 2px; }
+.swatch { width: 44px; height: 44px; border-radius: var(--radius); border: 1px solid var(--trace-soft); flex-shrink: 0; }
+.color-vals { font-family: var(--mono); font-size: 12.5px; line-height: 1.7; }
+
+.b-clock { margin-top: 2px; }
+.clock-time { font-family: var(--mono); font-size: 26px; font-weight: 600; }
+.clock-meta { font-size: 12.5px; color: var(--ink-soft); margin-top: 2px; }
+.msg.user .clock-meta { color: #C7D6CD; }
+
+.b-timer { margin-top: 6px; border: 1px solid var(--trace-soft); border-radius: var(--radius); padding: 10px 12px; background: var(--paper-dim); }
+.msg.user .b-timer { background: rgba(255,255,255,.06); border-color: var(--board-soft); }
+.timer-top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+.timer-label { font-family: var(--mono); font-size: 12px; color: var(--ink-soft); }
+.timer-count { font-family: var(--mono); font-size: 24px; font-weight: 600; }
+.timer-bar { height: 4px; background: var(--trace-soft); border-radius: 2px; overflow: hidden; }
+.timer-bar > i { display: block; height: 100%; background: var(--signal); transition: width 1s linear; }
+.timer-done .timer-count { color: var(--signal); }
+
+/* ───────────── inspector ───────────── */
+#inspector .panel-head .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--trace-soft); }
+#inspector .panel-head .dot.live { background: var(--signal); animation: blink 1.6s ease-in-out infinite; }
+.insp-body { padding: 16px; font-size: 13.5px; }
+.insp-empty { color: var(--ink-soft); font-size: 13.5px; line-height: 1.6; }
+.insp-row { margin-bottom: 14px; }
+.insp-row .k { font-family: var(--mono); font-size: 11px; color: var(--ink-soft); text-transform: none; margin-bottom: 4px; }
+.insp-row .v { font-size: 14px; }
+.insp-row .v.mono { font-family: var(--mono); font-size: 13px; background: var(--paper); border: 1px solid var(--trace-soft); border-radius: var(--radius); padding: 7px 9px; word-break: break-word; }
+.conf-bar { height: 8px; background: var(--paper); border: 1px solid var(--trace-soft); border-radius: 4px; overflow: hidden; margin-top: 5px; }
+.conf-bar > i { display: block; height: 100%; background: var(--signal); }
+.conf-bar.none > i { background: var(--alert); }
+.ent-table td { font-size: 12.5px; padding: 2px 0; }
+.ent-table td:first-child { color: var(--ink-soft); padding-right: 10px; }
+.ent-table td:last-child { font-family: var(--mono); }
+
+/* ───────────── rulebook + teach overlays ───────────── */
+.sheet-backdrop {
+  position: fixed; inset: 0; background: rgba(10, 14, 12, .45); display: flex; justify-content: flex-end;
+  z-index: 40;
+}
+.sheet {
+  width: min(480px, 100%); background: var(--paper); height: 100%; overflow-y: auto;
+  border-left: 1px solid var(--trace-soft); padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.sheet-head {
+  position: sticky; top: 0; background: var(--board); color: var(--paper); padding: 16px 20px;
+  display: flex; justify-content: space-between; align-items: center; z-index: 1;
+}
+.sheet-head h2 { margin: 0; font-family: var(--mono); font-size: 16px; font-weight: 600; }
+.sheet-close { background: none; border: none; color: var(--paper); font-size: 20px; line-height: 1; }
+.sheet-body { padding: 18px 20px 30px; }
+
+.rb-search { width: 100%; padding: 9px 12px; border: 1px solid var(--trace-soft); border-radius: var(--radius); font-family: var(--sans); font-size: 14px; margin-bottom: 16px; background: var(--paper-dim); color: var(--ink); }
+.rb-cat { margin-bottom: 22px; }
+.rb-cat h3 { font-family: var(--mono); font-size: 12.5px; color: var(--paper); background: var(--trace); display: inline-block; padding: 3px 9px; border-radius: 3px; margin: 0 0 10px; }
+.rb-rule { border-bottom: 1px solid var(--trace-soft); padding: 10px 0; }
+.rb-rule:last-child { border-bottom: none; }
+.rb-rule .lbl { font-weight: 600; font-size: 14.5px; }
+.rb-rule .blurb { font-size: 13px; color: var(--ink-soft); margin: 3px 0 6px; }
+.rb-rule .how { font-family: var(--mono); font-size: 11px; color: var(--trace); }
+.rb-rule .ex-row { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+.rb-custom-row { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; padding: 8px 0; border-bottom: 1px solid var(--trace-soft); }
+.rb-custom-row:last-child { border-bottom: none; }
+.rb-custom-row .trig { font-weight: 600; font-size: 13.5px; }
+.rb-custom-row .resp { font-size: 12.5px; color: var(--ink-soft); }
+
+.field { margin-bottom: 16px; }
+.field label { display: block; font-family: var(--mono); font-size: 12px; color: var(--ink-soft); margin-bottom: 6px; }
+.field input, .field textarea {
+  width: 100%; border: 1px solid var(--trace-soft); border-radius: var(--radius); padding: 10px 12px;
+  font-family: var(--sans); font-size: 14.5px; background: var(--paper-dim); color: var(--ink); resize: vertical;
+}
+.field input:focus, .field textarea:focus { border-color: var(--trace); }
+.hint { font-size: 12px; color: var(--ink-soft); margin-top: 5px; }
+
+@media (max-width: 520px) {
+  header.top .wrap { flex-wrap: nowrap; }
+  .brand .tag { display: none; }
+  nav.top-nav button { padding: 6px 8px; font-size: 12px; }
+  h1.headline { max-width: none; }
+  .signal-path { flex-wrap: wrap; row-gap: 8px; }
+  .signal-path .wire { min-width: 16px; }
+}
+
+footer.site {
+  border-top: 1px solid var(--trace-soft); padding: 22px 0 calc(22px + env(safe-area-inset-bottom, 0px));
+  font-size: 12.5px; color: var(--ink-soft); font-family: var(--mono);
+}
+footer.site .wrap { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+
+/* utility */
+.vis-hidden { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.mobile-only { display: none; }
+@media (max-width: 900px) {
+  .mobile-only { display: inline-flex; }
+  #chatlog { height: 60vh; }
+}
+
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <div class="brand"><span class="dot">●</span>Parlance<span class="tag">rule-based chatbot</span></div>
+    <nav class="top-nav">
+      <button data-open="rules">Rulebook</button>
+      <button data-open="teach">Teach it</button>
+    </nav>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="wrap">
+    <div class="kicker"><span class="led"></span>No model. No network. No training data.</div>
+    <h1 class="headline">Type something.<br>Watch which rule catches it.</h1>
+    <p class="sub">Parlance answers using <strong>patterns, keyword groups and small functions</strong> — the same if-else logic behind every rule-based system, just organised and scored. Nothing you type ever leaves this browser.</p>
+
+    <div class="signal-path" aria-hidden="true">
+      <div class="node">your message</div>
+      <div class="wire"></div>
+      <div class="node">normalise + fix typos</div>
+      <div class="wire"></div>
+      <div class="node">score every rule</div>
+      <div class="wire"></div>
+      <div class="node hot">best match replies</div>
+    </div>
+
+    <form class="try-row" id="hero-form">
+      <label for="hero-input" class="vis-hidden">Try a message</label>
+      <input id="hero-input" type="text" placeholder="Try: what time is it in tokyo" autocomplete="off">
+      <button class="btn signal" type="submit">Send</button>
+    </form>
+  </div>
+</section>
+
+<section class="specs">
+  <div class="wrap">
+    <div class="cell"><div class="n" id="stat-rules">–</div><div class="l">built-in rules</div></div>
+    <div class="cell"><div class="n" id="stat-patterns">–</div><div class="l">regex patterns</div></div>
+    <div class="cell"><div class="n">7</div><div class="l">categories</div></div>
+    <div class="cell"><div class="n" id="stat-custom">–</div><div class="l">rules you taught it</div></div>
+  </div>
+</section>
+
+<main class="app">
+  <div class="wrap grid">
+    <section class="panel" id="chat-panel">
+      <div class="panel-head">
+        <div class="title">Conversation</div>
+        <div style="display:flex; gap:8px;">
+          <button class="btn ghost small" id="btn-clear" type="button">Clear chat</button>
+        </div>
+      </div>
+      <div id="chatlog" role="log" aria-live="polite"></div>
+      <form class="composer" id="composer">
+        <label for="msg-input" class="vis-hidden">Message</label>
+        <input id="msg-input" type="text" placeholder="Ask, calculate, convert, or just say hello…" autocomplete="off">
+        <button class="btn signal" type="submit">Send</button>
+      </form>
+    </section>
+
+    <aside class="panel" id="inspector">
+      <div class="panel-head">
+        <div class="title"><span class="dot" id="insp-dot"></span>Inspector</div>
+        <button class="btn ghost small" data-open="rules" type="button">Rulebook</button>
+      </div>
+      <div class="insp-body" id="insp-body">
+        <p class="insp-empty">Send a message and this panel will show exactly which rule answered, how confident it was, and what it matched — down to the pattern.</p>
+      </div>
+    </aside>
+  </div>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <span>Parlance — a rule-based chatbot project</span>
+    <span>Runs entirely in your browser · nothing is sent anywhere</span>
+  </div>
+</footer>
+
+<div id="overlay-root"></div>
+
+<script>
+/* ════════════════════════════════════════════════════════════════════
+   PARLANCE — a rule-based conversation engine
+   normalise → correct → tokenise → match (pattern | keywords | function)
+   → resolve with context → respond → remember
+   No network. No model. Every reply traces back to a rule.
+   ════════════════════════════════════════════════════════════════════ */
+const Parlance = (() => {
+'use strict';
+
+const VERSION = '1.0';
+const THRESHOLD = 0.55;
+
+/* ───────────── small utilities ───────────── */
+const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
+const cap = s => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
+const titleCase = s => s.replace(/[a-z][a-z']*/gi, w => w[0].toUpperCase() + w.slice(1).toLowerCase());
+
+function lev(a, b) {
+  if (a === b) return 0;
+  const m = a.length, n = b.length;
+  if (!m) return n;
+  if (!n) return m;
+  let prev = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) {
+    const cur = [i];
+    for (let j = 1; j <= n; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    }
+    prev = cur;
+  }
+  return prev[n];
+}
+
+function rand(n) {                       // unbiased integer in [0, n)
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    const max = Math.floor(0x100000000 / n) * n, buf = new Uint32Array(1);
+    do { crypto.getRandomValues(buf); } while (buf[0] >= max);
+    return buf[0] % n;
+  }
+  return Math.floor(Math.random() * n);
+}
+const lastPick = {};
+function pick(key, arr) {                // random choice that avoids immediate repeats
+  let i = rand(arr.length);
+  if (arr.length > 1 && i === lastPick[key]) i = (i + 1 + rand(arr.length - 1)) % arr.length;
+  lastPick[key] = i;
+  return arr[i];
+}
+
+function fmtNum(n, sig = 10) {
+  if (!isFinite(n)) return String(n);
+  if (n === 0) return '0';
+  const a = Math.abs(n);
+  if (a >= 1e15 || a < 1e-7) return Number(n.toPrecision(Math.min(sig, 7))).toExponential().replace('e+', 'e');
+  return Number(n.toPrecision(sig)).toLocaleString('en-US', { maximumFractionDigits: 10 });
+}
+function fmtDur(sec) {
+  sec = Math.round(sec);
+  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+  const parts = [];
+  if (h) parts.push(h + ' h');
+  if (m) parts.push(m + ' min');
+  if (s || !parts.length) parts.push(s + ' s');
+  return parts.join(' ');
+}
+const plural = (n, w) => n + ' ' + w + (n === 1 ? '' : 's');
+
+/* ───────────── reply builders ───────────── */
+const text = v => ({ t: 'text', v });
+const reply = (blocks, chips = [], extra = {}) => ({
+  blocks: (Array.isArray(blocks) ? blocks : [blocks]).map(b => (typeof b === 'string' ? text(b) : b)),
+  chips, ...extra
+});
+const chip = (label, send) => ({ label, send: send || label });
+const act = (label, action, arg) => ({ label, action, arg });
+
+/* ───────────── step 1: normalise ───────────── */
+const CONTRACTIONS = [
+  [/\bwhat's\b/g, 'what is'], [/\bwhats\b/g, 'what is'], [/\bthat's\b/g, 'that is'], [/\bwho's\b/g, 'who is'],
+  [/\bit's\b/g, 'it is'], [/\bhow's\b/g, 'how is'], [/\bwhere's\b/g, 'where is'], [/\bthere's\b/g, 'there is'],
+  [/\bi'm\b/g, 'i am'], [/\bim\b/g, 'i am'], [/\byou're\b/g, 'you are'], [/\bwe're\b/g, 'we are'],
+  [/\bthey're\b/g, 'they are'], [/\bdon't\b/g, 'do not'], [/\bdoesn't\b/g, 'does not'], [/\bcan't\b/g, 'cannot'],
+  [/\bwon't\b/g, 'will not'], [/\bisn't\b/g, 'is not'], [/\bi'll\b/g, 'i will'], [/\bi've\b/g, 'i have'],
+  [/\blet's\b/g, 'let us'], [/\bgonna\b/g, 'going to'], [/\bwanna\b/g, 'want to'], [/\bu\b/g, 'you'],
+  [/\bur\b/g, 'your'], [/\bpls\b/g, 'please'], [/\bplz\b/g, 'please'], [/\bthx\b/g, 'thanks'],
+  [/\bty\b/g, 'thank you'], [/\bconvrt\b/g, 'convert'], [/\bcalc\b/g, 'calculate']
+];
+function clean(raw) {
+  return String(raw == null ? '' : raw)
+    .replace(/[\u2018\u2019]/g, "'").replace(/[\u201C\u201D]/g, '"')
+    .replace(/\s+/g, ' ').trim().slice(0, 500);
+}
+function normalize(raw) {
+  let s = clean(raw).toLowerCase();
+  for (const [re, to] of CONTRACTIONS) s = s.replace(re, to);
+  return s.replace(/[?!]+/g, ' ').replace(/\s+/g, ' ').trim().replace(/[.,;:]+$/, '').trim();
+}
+function tokenizeSpans(s) {
+  const out = [], re = /\d+(?:\.\d+)?|[a-z]+(?:'[a-z]+)?|[#%°]/g;
+  let m;
+  while ((m = re.exec(s))) out.push({ w: m[0], i: m.index, e: m.index + m[0].length });
+  return out;
+}
+const tokenize = s => tokenizeSpans(s).map(t => t.w);
+
+/* ───────────── step 2: gentle typo correction (against known vocabulary) ───────────── */
+const COMMON = new Set(('items times notes other thing things which their there where would could should about these those ' +
+  'being doing again after before write right never always three first second third house today great small large ' +
+  'later check under other while still might every years month weeks hours minutes seconds').split(' '));
+const EXTRA_VOCAB = ('tomorrow yesterday christmas halloween valentine celsius fahrenheit kelvin kilometers kilometres miles pounds ' +
+  'ounces minutes seconds hours calculate percent percentage password generate timer pomodoro reminder remember convert average ' +
+  'factorial weather thanks goodbye hello morning afternoon evening please tokyo london paris berlin sydney dubai singapore ' +
+  'delhi mumbai kolkata chicago toronto moscow istanbul cairo bangkok beijing shanghai seoul angeles francisco washington ' +
+  'gallon gallons liters litres inches meters metres yards ounces kilograms grams temperature palindrome uppercase lowercase ' +
+  'reverse count words characters random number choose coin flip dice notes todo tasks clear complete finish remove delete ' +
+  'stressed anxious overwhelmed tired exhausted lonely bored happy excited frustrated worried nervous productivity').split(' ');
+let VOCAB = null;
+function getVocab(intents, zones) {
+  if (VOCAB) return VOCAB;
+  const v = new Set(EXTRA_VOCAB);
+  const add = w => { if (w.length >= 5 && !/\d/.test(w)) v.add(w); };
+  for (const it of intents) {
+    (it.examples || []).forEach(e => tokenize(normalize(e)).forEach(add));
+    if (it.keywords) [...it.keywords.must, ...(it.keywords.nice || [])].flat().forEach(add);
+  }
+  Object.keys(zones).forEach(k => k.split(' ').forEach(add));
+  return (VOCAB = v);
+}
+function correctTypos(norm, vocab) {
+  const fixes = [], seen = new Set();
+  let out = norm;
+  for (const { w } of tokenizeSpans(norm)) {
+    if (seen.has(w)) continue;
+    seen.add(w);
+    if (w.length < 5 || /\d/.test(w) || vocab.has(w) || COMMON.has(w) || w.includes("'")) continue;
+    const maxD = w.length >= 8 ? 2 : 1;
+    let best = null, bd = 99;
+    for (const v of vocab) {
+      if (v[0] !== w[0] || Math.abs(v.length - w.length) > maxD) continue;
+      const d = lev(w, v);
+      if (d <= maxD && d < bd) { best = v; bd = d; }
+    }
+    if (best) { fixes.push({ from: w, to: best }); out = out.replace(new RegExp('\\b' + w + '\\b', 'g'), best); }
+  }
+  return { norm: out, fixes };
+}
+
+/* ───────────── maths: a real parser, never eval() ───────────── */
+class MathError extends Error {}
+const CONSTS = { pi: Math.PI, e: Math.E, tau: Math.PI * 2 };
+const tidy = x => (Math.abs(x) < 1e-12 ? 0 : Number(x.toPrecision(12)));
+const deg = x => (x * Math.PI) / 180;
+const FUNCS = {
+  sqrt: x => { if (x < 0) throw new MathError('The square root of a negative number isn’t real.'); return Math.sqrt(x); },
+  cbrt: Math.cbrt, abs: Math.abs, round: Math.round, floor: Math.floor, ceil: Math.ceil, exp: Math.exp,
+  sin: x => tidy(Math.sin(deg(x))), cos: x => tidy(Math.cos(deg(x))), tan: x => tidy(Math.tan(deg(x))),
+  log: x => { if (x <= 0) throw new MathError('Logarithms need a positive number.'); return Math.log10(x); },
+  ln: x => { if (x <= 0) throw new MathError('Logarithms need a positive number.'); return Math.log(x); },
+  fact: x => {
+    if (x < 0 || x > 170 || !Number.isInteger(x)) throw new MathError('Factorials need a whole number from 0 to 170.');
+    let r = 1; for (let i = 2; i <= x; i++) r *= i; return r;
+  }
+};
+function tokenizeMath(s) {
+  const toks = []; let i = 0;
+  while (i < s.length) {
+    const c = s[i];
+    if (/\s/.test(c)) { i++; continue; }
+    if (/[0-9.]/.test(c)) {
+      let j = i; while (j < s.length && /[0-9.]/.test(s[j])) j++;
+      const str = s.slice(i, j);
+      if (!/^(?:\d+\.?\d*|\.\d+)$/.test(str)) throw new Error('bad number');
+      toks.push({ t: 'num', v: parseFloat(str) }); i = j; continue;
+    }
+    if (/[a-z]/.test(c)) {
+      let j = i; while (j < s.length && /[a-z]/.test(s[j])) j++;
+      toks.push({ t: 'id', v: s.slice(i, j) }); i = j; continue;
+    }
+    if ('+-*/^%()'.includes(c)) { toks.push({ t: 'op', v: c }); i++; continue; }
+    throw new Error('bad char');
+  }
+  return toks;
+}
+function evalMath(toks) {
+  let p = 0;
+  const peek = () => toks[p], eat = () => toks[p++];
+  const isOp = v => peek() && peek().t === 'op' && peek().v === v;
+  const expr = () => {
+    let v = term();
+    while (isOp('+') || isOp('-')) { const o = eat().v, r = term(); v = o === '+' ? v + r : v - r; }
+    return v;
+  };
+  const term = () => {
+    let v = unary();
+    while (isOp('*') || isOp('/') || isOp('%')) {
+      const o = eat().v, r = unary();
+      if (o === '*') v *= r;
+      else { if (r === 0) throw new MathError('Dividing by zero is undefined — nothing to report.'); v = o === '/' ? v / r : v % r; }
+    }
+    return v;
+  };
+  const unary = () => {
+    if (isOp('-')) { eat(); return -unary(); }
+    if (isOp('+')) { eat(); return unary(); }
+    return power();
+  };
+  const power = () => { const b = primary(); if (isOp('^')) { eat(); return Math.pow(b, unary()); } return b; };
+  const primary = () => {
+    const t = eat();
+    if (!t) throw new Error('unexpected end');
+    if (t.t === 'num') return t.v;
+    if (t.t === 'op' && t.v === '(') { const v = expr(); if (!isOp(')')) throw new Error('missing )'); eat(); return v; }
+    if (t.t === 'id') {
+      if (t.v in CONSTS) return CONSTS[t.v];
+      const f = FUNCS[t.v];
+      if (!f) throw new Error('unknown ' + t.v);
+      let arg;
+      if (isOp('(')) { eat(); arg = expr(); if (!isOp(')')) throw new Error('missing )'); eat(); }
+      else if (peek() && peek().t === 'num') arg = eat().v;
+      else throw new Error('missing argument');
+      return f(arg);
+    }
+    throw new Error('unexpected token');
+  };
+  const v = expr();
+  if (p < toks.length) throw new Error('trailing tokens');
+  return v;
+}
+function prepMath(norm) {
+  let s = norm;
+  s = s.replace(/^(?:please |can you |could you |hey )*(?:calculate|compute|solve|evaluate|work out|what is|how much is|tell me|find)\s+/, '');
+  s = s.replace(/^(?:the )?(?:result of|value of|answer to)\s+/, '');
+  s = s.replace(/\s*=\s*$/, '');
+  s = s.replace(/×/g, '*').replace(/÷/g, '/');
+  s = s.replace(/(\d)\s*x\s*(?=\d)/g, '$1*');
+  s = s.replace(/(?:square root|sqrt) (?:of )?/g, 'sqrt ').replace(/cube root (?:of )?/g, 'cbrt ');
+  s = s.replace(/\b(sin|cos|tan|log|ln|abs|factorial|exp) (?:of )?/g, (m, f) => (f === 'factorial' ? 'fact' : f) + ' ');
+  s = s.replace(/\bto the power of\b|\braised to(?: the power of)?\b/g, '^');
+  s = s.replace(/\bmultiplied by\b|\bmultiply by\b|\btimes\b/g, '*');
+  s = s.replace(/\bdivided by\b|\bdivide by\b|\bover\b/g, '/');
+  s = s.replace(/\bplus\b/g, '+').replace(/\bminus\b/g, '-');
+  s = s.replace(/\bsquared\b/g, '^2').replace(/\bcubed\b/g, '^3').replace(/\bmod(?:ulo)?\b/g, '%');
+  s = s.replace(/(\d),(?=\d{3}\b)/g, '$1');
+  return s.trim();
+}
+const prettyExpr = s => s.replace(/\s*([+\-*/^%])\s*/g, ' $1 ').replace(/\*/g, '×').replace(/\//g, '÷').replace(/(^| )- /g, '$1−').replace(/ - /g, ' − ').replace(/\s+/g, ' ').trim();
+
+/* ───────────── units ───────────── */
+const UNIT_TABLE = {
+  length: { m: [1, 'm meter meters metre metres'], km: [1000, 'km kms kilometer kilometers kilometre kilometres'],
+    cm: [0.01, 'cm centimeter centimeters centimetre centimetres'], mm: [0.001, 'mm millimeter millimeters millimetre millimetres'],
+    mi: [1609.344, 'mi mile miles'], yd: [0.9144, 'yd yds yard yards'], ft: [0.3048, 'ft foot feet'], in: [0.0254, 'in inch inches'] },
+  mass: { g: [1, 'g gram grams'], kg: [1000, 'kg kgs kilogram kilograms kilo kilos'], mg: [0.001, 'mg milligram milligrams'],
+    lb: [453.59237, 'lb lbs pound pounds'], oz: [28.349523125, 'oz ounce ounces'], st: [6350.29318, 'stone stones'] },
+  volume: { ml: [1, 'ml milliliter milliliters millilitre millilitres'], l: [1000, 'l liter liters litre litres'],
+    gal: [3785.411784, 'gal gallon gallons'], qt: [946.352946, 'qt quart quarts'], pt: [473.176473, 'pint pints'],
+    cup: [236.588236, 'cup cups'], floz: [29.5735295625, 'floz'], tbsp: [14.78676478125, 'tbsp tablespoon tablespoons'],
+    tsp: [4.92892159375, 'tsp teaspoon teaspoons'] },
+  speed: { 'm/s': [1, 'mps m/s'], 'km/h': [1 / 3.6, 'kmh kph kmph km/h'], mph: [0.44704, 'mph mi/h'],
+    kn: [0.514444, 'kn knot knots kt kts'], 'ft/s': [0.3048, 'fps ft/s'] },
+  data: { b: [1, 'b byte bytes'], kb: [1024, 'kb kilobyte kilobytes'], mb: [1048576, 'mb megabyte megabytes'],
+    gb: [1073741824, 'gb gigabyte gigabytes'], tb: [1099511627776, 'tb terabyte terabytes'] },
+  time: { s: [1, 'sec secs second seconds'], ms: [0.001, 'ms millisecond milliseconds'], min: [60, 'min mins minute minutes'],
+    h: [3600, 'h hr hrs hour hours'], d: [86400, 'day days'], wk: [604800, 'week weeks'] },
+  temp: { c: [0, 'c celsius centigrade'], f: [0, 'f fahrenheit'], k: [0, 'k kelvin'] }
+};
+const UNIT_LABEL = { c: '°C', f: '°F', k: 'K', l: 'L', floz: 'fl oz', kn: 'kn', min: 'min', d: 'days', wk: 'weeks', s: 's', h: 'h' };
+const ALIAS = {};
+for (const [cat, units] of Object.entries(UNIT_TABLE))
+  for (const [key, [factor, names]] of Object.entries(units))
+    for (const n of names.split(' ')) if (!ALIAS[n]) ALIAS[n] = { cat, key, factor };
+const lookupUnit = w => ALIAS[w] || (w.endsWith('s') ? ALIAS[w.slice(0, -1)] : null) || null;
+const unitLabel = k => UNIT_LABEL[k] || k;
+function toCelsius(v, k) { return k === 'c' ? v : k === 'f' ? (v - 32) * 5 / 9 : v - 273.15; }
+function fromCelsius(c, k) { return k === 'c' ? c : k === 'f' ? c * 9 / 5 + 32 : c + 273.15; }
+function convertUnits(v, from, to) {
+  const a = lookupUnit(from), b = lookupUnit(to);
+  if (!a || !b) return null;
+  if (a.cat !== b.cat) return { error: true, a, b };
+  if (a.cat === 'temp') return { a, b, value: fromCelsius(toCelsius(v, a.key), b.key) };
+  return { a, b, value: (v * a.factor) / b.factor };
+}
+const unitsIn = cat => Object.keys(UNIT_TABLE[cat]);
+
+/* ───────────── time zones & dates ───────────── */
+const ZONES = {
+  'new york': 'America/New_York', nyc: 'America/New_York', boston: 'America/New_York', washington: 'America/New_York', miami: 'America/New_York',
+  toronto: 'America/Toronto', chicago: 'America/Chicago', houston: 'America/Chicago', dallas: 'America/Chicago', denver: 'America/Denver',
+  phoenix: 'America/Phoenix', 'los angeles': 'America/Los_Angeles', la: 'America/Los_Angeles', 'san francisco': 'America/Los_Angeles',
+  seattle: 'America/Los_Angeles', vancouver: 'America/Vancouver', 'mexico city': 'America/Mexico_City', 'sao paulo': 'America/Sao_Paulo',
+  'buenos aires': 'America/Argentina/Buenos_Aires', bogota: 'America/Bogota', lima: 'America/Lima', honolulu: 'Pacific/Honolulu',
+  anchorage: 'America/Anchorage', london: 'Europe/London', dublin: 'Europe/Dublin', lisbon: 'Europe/Lisbon', paris: 'Europe/Paris',
+  berlin: 'Europe/Berlin', madrid: 'Europe/Madrid', rome: 'Europe/Rome', amsterdam: 'Europe/Amsterdam', zurich: 'Europe/Zurich',
+  vienna: 'Europe/Vienna', stockholm: 'Europe/Stockholm', oslo: 'Europe/Oslo', copenhagen: 'Europe/Copenhagen', helsinki: 'Europe/Helsinki',
+  warsaw: 'Europe/Warsaw', prague: 'Europe/Prague', athens: 'Europe/Athens', istanbul: 'Europe/Istanbul', moscow: 'Europe/Moscow',
+  cairo: 'Africa/Cairo', lagos: 'Africa/Lagos', nairobi: 'Africa/Nairobi', johannesburg: 'Africa/Johannesburg', 'cape town': 'Africa/Johannesburg',
+  casablanca: 'Africa/Casablanca', accra: 'Africa/Accra', dubai: 'Asia/Dubai', 'abu dhabi': 'Asia/Dubai', riyadh: 'Asia/Riyadh', doha: 'Asia/Qatar',
+  tehran: 'Asia/Tehran', karachi: 'Asia/Karachi', lahore: 'Asia/Karachi', islamabad: 'Asia/Karachi', delhi: 'Asia/Kolkata', 'new delhi': 'Asia/Kolkata',
+  mumbai: 'Asia/Kolkata', kolkata: 'Asia/Kolkata', calcutta: 'Asia/Kolkata', bangalore: 'Asia/Kolkata', bengaluru: 'Asia/Kolkata',
+  chennai: 'Asia/Kolkata', hyderabad: 'Asia/Kolkata', pune: 'Asia/Kolkata', india: 'Asia/Kolkata', dhaka: 'Asia/Dhaka', kathmandu: 'Asia/Kathmandu',
+  colombo: 'Asia/Colombo', bangkok: 'Asia/Bangkok', hanoi: 'Asia/Ho_Chi_Minh', jakarta: 'Asia/Jakarta', singapore: 'Asia/Singapore',
+  'kuala lumpur': 'Asia/Kuala_Lumpur', manila: 'Asia/Manila', 'hong kong': 'Asia/Hong_Kong', beijing: 'Asia/Shanghai', shanghai: 'Asia/Shanghai',
+  china: 'Asia/Shanghai', taipei: 'Asia/Taipei', seoul: 'Asia/Seoul', tokyo: 'Asia/Tokyo', japan: 'Asia/Tokyo', osaka: 'Asia/Tokyo',
+  sydney: 'Australia/Sydney', melbourne: 'Australia/Melbourne', brisbane: 'Australia/Brisbane', perth: 'Australia/Perth',
+  adelaide: 'Australia/Adelaide', auckland: 'Pacific/Auckland', wellington: 'Pacific/Auckland', utc: 'UTC', gmt: 'UTC'
+};
+const CITY_CASE = { nyc: 'NYC', la: 'LA', utc: 'UTC', gmt: 'GMT' };
+const cityLabel = c => CITY_CASE[c] || titleCase(c);
+function tzOffsetMin(tz, d = new Date()) {
+  const f = new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23', year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric' });
+  const p = Object.fromEntries(f.formatToParts(d).map(x => [x.type, x.value]));
+  const asUTC = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second);
+  return Math.round((asUTC - Math.floor(d.getTime() / 1000) * 1000) / 60000);
+}
+function diffText(mins) {
+  if (!mins) return 'Same time as you';
+  const a = Math.abs(mins), h = Math.floor(a / 60), m = a % 60;
+  const amt = (h ? h + 'h' : '') + (m ? (h ? ' ' : '') + m + 'm' : '');
+  return amt + (mins > 0 ? ' ahead of you' : ' behind you');
+}
+const MONTHS = { jan: 0, january: 0, feb: 1, february: 1, mar: 2, march: 2, apr: 3, april: 3, may: 4, jun: 5, june: 5, jul: 6, july: 6,
+  aug: 7, august: 7, sep: 8, sept: 8, september: 8, oct: 9, october: 9, nov: 10, november: 10, dec: 11, december: 11 };
+const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+const startOfDay = d => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+const dayDiff = (a, b) => Math.round((startOfDay(b) - startOfDay(a)) / 86400000);
+const fmtDate = d => d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+function validDate(y, m, d) { const t = new Date(y, m, d); return t.getFullYear() === y && t.getMonth() === m && t.getDate() === d ? t : null; }
+function parseDate(str, nowD = new Date(), prefer = 'future') {
+  const s = str.trim().replace(/'/g, '').replace(/\b(\d+)(?:st|nd|rd|th)\b/g, '$1').replace(/\bof\b/g, ' ').replace(/,/g, ' ').replace(/\s+/g, ' ');
+  const today = startOfDay(nowD);
+  let m;
+  if (s === 'today') return { date: today, label: 'Today' };
+  if (s === 'tomorrow') return { date: addDays(today, 1), label: 'Tomorrow' };
+  if (s === 'yesterday') return { date: addDays(today, -1), label: 'Yesterday' };
+  if ((m = s.match(/^(?:next |this |on )?(sunday|monday|tuesday|wednesday|thursday|friday|saturday)$/))) {
+    let delta = (WEEKDAYS.indexOf(m[1]) - today.getDay() + 7) % 7; if (delta === 0) delta = 7;
+    return { date: addDays(today, delta), label: cap(m[1]) };
+  }
+  const yearFor = (mo, d) => {
+    let y = today.getFullYear(), t = validDate(y, mo, d);
+    if (!t) return null;
+    if (prefer === 'future' && t < today) t = validDate(y + 1, mo, d);
+    if (prefer === 'past' && t > today) t = validDate(y - 1, mo, d);
+    return t;
+  };
+  const named = [[/^(?:christmas(?: day)?|xmas)$/, 11, 25, 'Christmas'], [/^christmas eve$/, 11, 24, 'Christmas Eve'], [/^halloween$/, 9, 31, 'Halloween'],
+    [/^valentines?(?: day)?$/, 1, 14, 'Valentine’s Day'], [/^new years? eve$/, 11, 31, 'New Year’s Eve'], [/^new years?(?: day)?$/, 0, 1, 'New Year’s Day']];
+  for (const [re, mo, d, label] of named) if (re.test(s)) { const t = yearFor(mo, d); return t && { date: t, label }; }
+  if ((m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/))) { const t = validDate(+m[1], +m[2] - 1, +m[3]); return t && { date: t }; }
+  if ((m = s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})$/))) {
+    let y = +m[3]; if (y < 100) y += 2000;
+    const t = validDate(y, +m[2] - 1, +m[1]); return t && { date: t };
+  }
+  if ((m = s.match(/^(\d{1,2}) ([a-z]+)(?: (\d{4}))?$/)) && m[2] in MONTHS) {
+    const t = m[3] ? validDate(+m[3], MONTHS[m[2]], +m[1]) : yearFor(MONTHS[m[2]], +m[1]); return t && { date: t };
+  }
+  if ((m = s.match(/^([a-z]+) (\d{1,2})(?: (\d{4}))?$/)) && m[1] in MONTHS) {
+    const t = m[3] ? validDate(+m[3], MONTHS[m[1]], +m[2]) : yearFor(MONTHS[m[1]], +m[2]); return t && { date: t };
+  }
+  return null;
+}
+function isoWeek(d) {
+  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const day = t.getUTCDay() || 7; t.setUTCDate(t.getUTCDate() + 4 - day);
+  return Math.ceil(((t - Date.UTC(t.getUTCFullYear(), 0, 1)) / 86400000 + 1) / 7);
+}
+
+/* ───────────── durations, colours, passwords ───────────── */
+function parseDuration(s) {
+  let total = 0, found = false;
+  s = s.replace(/\bhalf an? hour\b/g, '30 minutes').replace(/\ban? hour and a half\b/g, '90 minutes')
+    .replace(/\bquarter of an hour\b/g, '15 minutes').replace(/\ban? (?=hour|minute|second)/g, '1 ');
+  const re = /(\d+(?:\.\d+)?)\s*(hours?|hrs?|h|minutes?|mins?|m|seconds?|secs?|s)\b/g;
+  let m;
+  while ((m = re.exec(s))) { const v = parseFloat(m[1]), u = m[2][0]; total += u === 'h' ? v * 3600 : u === 'm' ? v * 60 : v; found = true; }
+  return found ? Math.round(total) : null;
+}
+function rgbToHsl([r, g, b]) {
+  r /= 255; g /= 255; b /= 255;
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, d = mx - mn;
+  let h = 0, s = 0;
+  if (d) {
+    s = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn);
+    h = mx === r ? (g - b) / d + (g < b ? 6 : 0) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    h *= 60;
+  }
+  return [Math.round(h), Math.round(s * 100), Math.round(l * 100)];
+}
+const toHex = rgb => '#' + rgb.map(v => v.toString(16).padStart(2, '0')).join('').toUpperCase();
+function genPassword({ length = 16, symbols = true, digitsOnly = false } = {}) {
+  length = Math.max(4, Math.min(128, length));
+  const sets = digitsOnly ? ['0123456789'] : ['abcdefghijkmnpqrstuvwxyz', 'ABCDEFGHJKLMNPQRSTUVWXYZ', '23456789'];
+  if (symbols && !digitsOnly) sets.push('!@#$%^&*-_=+?');
+  const all = sets.join('');
+  const out = sets.map(s => s[rand(s.length)]);
+  while (out.length < length) out.push(all[rand(all.length)]);
+  for (let i = out.length - 1; i > 0; i--) { const j = rand(i + 1); [out[i], out[j]] = [out[j], out[i]]; }
+  const entropy = Math.round(length * Math.log2(all.length));
+  const label = entropy < 40 ? 'Weak' : entropy < 60 ? 'Fair' : entropy < 80 ? 'Strong' : 'Excellent';
+  return { value: out.join(''), entropy, label };
+}
+
+/* ───────────── content banks ───────────── */
+const JOKES = [
+  'Why do programmers prefer dark mode? Because light attracts bugs.',
+  'A SQL query walks into a bar, sees two tables and asks: “Can I join you?”',
+  'There are 10 kinds of people: those who understand binary and those who don’t.',
+  'I’d tell you a UDP joke, but you might not get it.',
+  'How many programmers does it take to change a light bulb? None — that’s a hardware problem.',
+  'An if-else walks into a bar. The bartender asks, “What’ll it be?” It depends.',
+  'My regex and I are alike: we both match plenty of things you never asked for.',
+  'Why did the developer go broke? He used up all his cache.'
+];
+const FACTS = [
+  'A day on Venus (one full rotation) lasts longer than its year: about 243 Earth days against 225.',
+  'Octopuses have three hearts and blue blood.',
+  'Honey barely spoils. Its low water content and acidity make it very hard for microbes to grow.',
+  'The first computer “bug” on record was a real moth, taped into the logbook of Harvard’s Mark II in 1947.',
+  'ELIZA, written in the mid-1960s, is often called the first chatbot — and it worked by pattern matching, just like me.',
+  'Botanically, bananas are berries. Strawberries are not.',
+  'The Anglo-Zanzibar War of 1896 is usually cited as the shortest war on record, at under an hour.',
+  'A shuffled deck of 52 cards is almost certainly in an order that has never existed before: 52! is roughly 8 × 10⁶⁷.'
+];
+const TIPS = [
+  'Work in 25-minute blocks with 5-minute breaks. Say **start a pomodoro** and I’ll time it.',
+  'Decide the one thing that would make today a success before you open anything else.',
+  'Batch shallow tasks like email and messages into two or three slots instead of checking all day.',
+  'Put your phone in another room while you study. Even a silent phone on the desk costs attention.',
+  'Turn a vague task into a first physical action: “open the doc and write the heading” beats “work on report”.',
+  'Stop mid-sentence at the end of a session. Restarting tomorrow becomes easy.'
+];
+const THOUGHTS = [
+  'Small rules, applied every day, beat big plans applied once.',
+  'Clarity is a kindness, most of all to your future self.',
+  'You rarely need more time. You need fewer open loops.',
+  'Start before you feel ready. The feeling tends to arrive mid-task.',
+  'A good system makes the right thing the easy thing.'
+];
+const KNOWLEDGE = [
+  { k: /\brule[- ]?based\b/, t: 'Rule-based chatbot', d: 'A rule-based chatbot maps what you type to a reply using rules a person wrote: patterns, keywords and if–else logic. It is predictable and easy to debug, but it only knows what its rules cover. That’s me.' },
+  { k: /\b(?:nlp|natural language processing)\b/, t: 'NLP', d: 'Natural Language Processing is the field of getting computers to work with human language: splitting text into tokens, recognising intent, pulling out entities and writing replies. Rule-based matching is the simplest NLP you can build; modern systems use machine learning.' },
+  { k: /\b(?:regex|regular expressions?|regexp)\b/, t: 'Regular expression', d: 'A regular expression is a compact pattern language for text. `\\bhello\\b` matches the word hello; `(\\d+)\\s*km` captures a number followed by km. They are the workhorse of rule-based matching, and every rule in my rulebook is one.' },
+  { k: /\bpattern matching\b|\bpatterns?\b/, t: 'Pattern matching', d: 'Pattern matching means testing text against a template. I use three kinds: regular expressions, keyword groups and small functions. Each match gets a score, and the highest score wins.' },
+  { k: /\bintents?\b/, t: 'Intent', d: 'An intent is what the user wants: convert units, set a timer, say hello. Each intent in my rulebook has the patterns that trigger it and a handler that writes the answer.' },
+  { k: /\bentit(?:y|ies)\b|\bslots?\b/, t: 'Entity', d: 'An entity is a specific value inside a message: **72** and **f** in “convert 72 f to c”. I pull entities out with capture groups, and the inspector shows exactly what I found.' },
+  { k: /\btoken(?:s|i[sz]ation|i[sz]ing)?\b/, t: 'Tokenisation', d: 'Tokenisation splits a sentence into units, usually words and numbers. “convert 5 km” becomes three tokens: convert, 5, km.' },
+  { k: /\bfuzzy\b|\btypos?\b|\bedit distance\b|\blevenshtein\b|\bspell(?:ing)?\b/, t: 'Fuzzy matching', d: 'Fuzzy matching tolerates typos by measuring edit distance: the number of single-letter changes between two words. Before matching, I nudge unknown words to a known word within one or two edits, and I show every correction I make.' },
+  { k: /\beliza\b/, t: 'ELIZA', d: 'ELIZA was written by Joseph Weizenbaum at MIT in the mid-1960s. It imitated a psychotherapist by spotting keywords and reflecting your own words back. There was no understanding at all, and yet people found it compelling.' },
+  { k: /\bturing test\b|\bturing\b/, t: 'Turing test', d: 'The Turing test comes from Alan Turing’s 1950 paper “Computing Machinery and Intelligence”: if a judge can’t reliably tell a machine from a person in conversation, the machine passes. A bot like me would fail quickly, and that’s fine.' },
+  { k: /\bif[- ]?else\b|\bconditionals?\b/, t: 'If–else', d: 'If–else is the oldest way to branch: if the message looks like X, do Y; else if it looks like Z, do W. My engine keeps the idea but scores every rule and picks the best, so the order of rules isn’t a fragile ladder.' },
+  { k: /\bconversation flow\b|\bcontext\b|\bdialogue\b|\bdialog\b/, t: 'Conversation flow', d: 'Conversation flow is how a bot handles follow-ups. I keep a small context: your name, my last topic, and sometimes a pending question like “Want a 5-minute timer?” so that a bare “yes” means something.' },
+  { k: /\bconfidence\b|\bscores?\b/, t: 'Confidence score', d: 'Every match gets a score from 0 to 1 based on how specific the rule is and how much of your message it explains. Below 0.55 I say I didn’t understand instead of guessing.' },
+  { k: /\b(?:machine learning|ml|llm|large language models?|neural networks?|chatgpt|deep learning)\b/, t: 'Machine learning', d: 'Machine learning systems learn patterns from data instead of following hand-written rules; large language models are one kind. I contain no model. Every reply comes from a rule you can inspect.' },
+  { k: /\bchat ?bots?\b|\bbots?\b/, t: 'Chatbot', d: 'A chatbot is a program that holds a conversation in text or voice. Some use statistical models; others, like me, use hand-written rules.' },
+  { k: /\b(?:ai|artificial intelligence)\b/, t: 'Artificial intelligence', d: 'Artificial intelligence is the broad goal of machines doing things that normally need human intelligence. Rule-based programs like me are the oldest and simplest branch: the intelligence is in the rules a person wrote.' }
+];
+
+/* ════════════════════════ THE RULEBOOK ════════════════════════
+   A rule = id, patterns / keywords / matcher function, run().
+   run() may return null to say "not mine after all" and the
+   next-best rule gets a turn.
+   ═══════════════════════════════════════════════════════════ */
+const INTENTS = [];
+const def = o => INTENTS.push(Object.assign({ base: 0.92, priority: 0, patterns: [], examples: [], hidden: false }, o));
+const DUR = '(?:\\d+(?:\\.\\d+)?\\s*(?:hours?|hrs?|h|minutes?|mins?|m|seconds?|secs?|s)\\b\\s*(?:and\\s+)?)+';
+const YES = /^(?:yes|yeah|yep|yup|yea|sure|ok|okay|please do|do it|go ahead|go for it|absolutely|of course|definitely|y|sounds good|why not)\b/;
+const NO = /^(?:no|nope|nah|not now|no thanks|no thank you|cancel|never mind|nevermind|skip|stop|n|do not)\b/;
+const ask = (env, label, yes, no) => { env.ctx.pending = { type: 'confirm', label, yes, no }; };
+const firstNum = s => { const m = s.match(/-?\d+(?:\.\d+)?/); return m ? parseFloat(m[0]) : null; };
+const num = s => parseFloat(String(s).replace(/,/g, ''));
+
+function timerReply(secs, label, chips) {
+  if (!(secs >= 1) || secs > 86400) return reply('I can time anything from 1 second up to 24 hours. Try **10 minutes** or **1h 30m**.');
+  const lead = label === 'Timer' ? 'Timer' : `${label} timer`;
+  return reply([text(`${lead} set for **${fmtDur(secs)}**. I’ll ping you here when it ends, so keep this tab open.`), { t: 'timer', seconds: secs, label }], chips || []);
+}
+
+/* ── Conversation ─────────────────────────────────────────── */
+def({ id: 'safety', label: 'Safety net', category: 'Conversation', priority: 5, base: 0.99, hidden: true,
+  blurb: 'The highest-priority rule. If a message signals someone may be in danger, Parlance stops chatting and points to real human help.',
+  patterns: [/\b(?:kill myself|suicid(?:e|al)|end my life|want to die|self[- ]?harm|hurt myself|do not want to live|better off dead)\b/],
+  run() {
+    return reply([text('I’m really sorry you’re hurting. I’m a small rule-based program, and this deserves more than I can give.'),
+      text('If you might act on these thoughts or you’re in immediate danger, please contact your local emergency number now. You can also reach a crisis line in your country, or talk to someone you trust: a friend, a family member, a doctor. You don’t have to carry this alone.')]);
+  } });
+
+def({ id: 'greeting', label: 'Greeting', category: 'Conversation',
+  blurb: 'Greets you according to the time of day and uses your name if it knows it.',
+  examples: ['hello', 'good morning', 'hey there'],
+  patterns: [/^(?:hi+|hello+|hey+|heya|hiya|yo|howdy|hola|namaste|greetings|good (?:morning|afternoon|evening|day))\b/],
+  run(env) {
+    const h = new Date().getHours(), n = env.eng.getName(), who = n ? `, ${n}` : '';
+    const part = h < 5 ? 'Still up' : h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+    return reply(pick('greet', [`${part}${who}. What can I do for you?`, `Hello${who}. Ask for the time, a calculation or a timer, or say **help**.`, `${part}${who}. I’m ready when you are.`]),
+      [chip('What can you do?'), chip('What time is it in Tokyo?'), chip('Start a 25 minute pomodoro')]);
+  } });
+
+def({ id: 'farewell', label: 'Goodbye', category: 'Conversation',
+  blurb: 'Says goodbye and mentions any open tasks you still have.',
+  examples: ['goodbye', 'see you later', 'good night'],
+  patterns: [/^(?:bye+|goodbye|good night|see (?:you|ya)|later|cya|take care|i have to go|i must go|gtg|talk (?:to you )?later)\b/],
+  run(env) {
+    const n = env.eng.getName(), open = env.eng.todos.list().filter(t => !t.done).length;
+    return reply(`Take care${n ? ', ' + n : ''}. ${open ? `You still have ${plural(open, 'open task')}, and they’ll be here when you’re back.` : 'I’ll be here when you’re back.'}`);
+  } });
+
+def({ id: 'thanks', label: 'Thanks', category: 'Conversation',
+  blurb: 'Accepts thanks graciously.', examples: ['thanks', 'thank you so much'],
+  patterns: [/\b(?:thanks|thank you|thank you so much|much appreciated|appreciate it|cheers)\b/],
+  run() { return reply(pick('thanks', ['You’re welcome.', 'Happy to help.', 'Any time.', 'Glad that worked.']), [chip('Tell me a fun fact')]); } });
+
+def({ id: 'how_are_you', label: 'How are you', category: 'Conversation',
+  blurb: 'Small talk. Answers honestly for a program.', examples: ['how are you', 'how is it going'],
+  patterns: [/\bhow are you(?: doing| today| feeling)?\b/, /\bhow is it going\b/, /\bhow have you been\b/, /^(?:what is up|sup|wassup)\b/],
+  run() {
+    return reply(pick('hay', ['Running smoothly: no bugs today, as far as I can tell. How are you?', 'All rules firing, no exceptions thrown. How about you?']),
+      [chip('I am good'), chip('I am stressed'), chip('I am bored')]);
+  } });
+
+def({ id: 'identity', label: 'Who are you', category: 'Conversation',
+  blurb: 'Introduces itself.', examples: ['who are you', 'what is your name'],
+  patterns: [/\bwho are you\b/, /\bwhat is your name\b/, /\byour name\b/, /\bintroduce yourself\b/, /\btell me about yourself\b/, /\bwhat should i call you\b/],
+  run() {
+    return reply('I’m **Parlance**, a rule-based chatbot. There’s no neural network and no cloud behind me: just patterns, scoring and a little memory, all running in your browser. Open the inspector to see exactly how each reply is chosen.',
+      [chip('How do you work?'), chip('What can you do?')]);
+  } });
+
+def({ id: 'nature', label: 'Are you a bot', category: 'Conversation',
+  blurb: 'Answers honestly about what it is.', examples: ['are you a robot', 'are you human'],
+  patterns: [/\bare you (?:a |an )?(?:real |actual )?(?:bot|robot|human|person|ai|chatgpt|gpt|alive|machine|computer|program|sentient|conscious)\b/],
+  run() { return reply('I’m a program, not a person, and not a large language model either. Every answer I give comes from a rule written in advance, which is why I can show my work.', [chip('How do you work?')]); } });
+
+def({ id: 'creator', label: 'Who made you', category: 'Conversation',
+  blurb: 'Explains where it comes from.', examples: ['who made you'],
+  patterns: [/\bwho (?:made|created|built|programmed|designed|developed|wrote) you\b/, /\bwho is your (?:creator|developer|maker|author)\b/],
+  run() { return reply('A person wrote me as a rule-based chatbot project: some regular expressions, a scoring function and a lot of if–else thinking. No training data, no API keys.', [chip('What is a rule-based chatbot?')]); } });
+
+def({ id: 'capabilities', label: 'Help and menu', category: 'Conversation',
+  blurb: 'Lists everything Parlance can do, with phrases you can click to try.',
+  examples: ['help', 'what can you do'],
+  patterns: [/^(?:help|menu|commands|options|features|instructions)\b/, /\bwhat can you do\b/, /\bwhat do you do\b/, /\bhow (?:can|do) you help\b/,
+    /\bwhat are your (?:skills|features|abilities|commands|capabilities)\b/, /\bwhat (?:else )?can i (?:ask|say|do)\b/],
+  run() {
+    return reply([text('Here’s what I can do. Click any phrase to try it.'), { t: 'help', sections: [
+      { title: 'Time and date', items: ['What time is it in Tokyo?', 'Days until Christmas', 'What day is 15 August 2027?'] },
+      { title: 'Maths and units', items: ['Calculate (12+8)*3', '18% of 2450', 'Convert 72 f to c', 'Tip 15% on 84.50 split 3 ways', 'Average of 4, 8, 15, 16'] },
+      { title: 'Focus and tasks', items: ['Start a 25 minute pomodoro', 'Add buy milk to my todo list', 'Remind me to stretch in 20 minutes', 'Remember that my locker code is 4821'] },
+      { title: 'Utilities', items: ['Generate a 20 character password', 'Roll 2d6', 'Choose between pizza, sushi or tacos', 'Convert #ff5733 to rgb', 'Word count: the quick brown fox'] },
+      { title: 'Conversation', items: ['Call me Alex', 'Tell me a joke', 'What is a rule-based chatbot?', 'How do you work?'] }
+    ] }]);
+  } });
+
+def({ id: 'rules_list', label: 'List the rules', category: 'Conversation',
+  blurb: 'Says how many rules are loaded and points to the rulebook.', examples: ['show your rules'],
+  patterns: [/\b(?:show|list|see|what|which)\b.*\b(?:rules|intents|rulebook)\b/],
+  run(env) {
+    const n = INTENTS.filter(i => !i.hidden).length, p = INTENTS.reduce((a, i) => a + i.patterns.length, 0), c = env.eng.custom.list().length;
+    return reply(`I have **${n} built-in rules** using **${p} patterns**${c ? `, plus **${plural(c, 'rule')}** you taught me` : ''}. The full rulebook is on this page, and you can add your own.`,
+      [act('Open the rulebook', 'rules'), act('Teach a new rule', 'teach')]);
+  } });
+
+def({ id: 'set_name', label: 'Remember my name', category: 'Conversation', raw: true,
+  blurb: 'Stores your name in this browser so later replies can use it.', examples: ['call me Alex', 'my name is Priya'],
+  patterns: [/\b(?:my name is|call me|you can call me|i am called|people call me)\s+(?<name>[a-z][a-z'\-]*(?:\s[a-z][a-z'\-]*)?)\b/i],
+  run(env, hit) {
+    let n = (hit.entities.name || '').trim();
+    if (!n || /^(?:a|an|the|sorry|not|back|later|when|if|please|at|tomorrow|maybe|again|now)\b/i.test(n)) return null;
+    n = titleCase(n.split(/\s+(?:and|but|please|btw)\b/i)[0]);
+    env.eng.setName(n);
+    return reply(`Nice to meet you, **${n}**. I’ll remember that in this browser.`, [chip('What is my name?'), chip('What can you do?')]);
+  } });
+
+def({ id: 'get_name', label: 'Recall my name', category: 'Conversation',
+  blurb: 'Tells you the name you gave it.', examples: ['what is my name', 'who am i'],
+  patterns: [/\bwhat is my name\b/, /\bwho am i\b/, /\bdo you (?:know|remember) my name\b/],
+  run(env) {
+    const n = env.eng.getName();
+    return n ? reply(`You’re **${n}**.`) : reply('You haven’t told me yet. Say **call me Alex** (with your own name) and I’ll remember it.', [chip('Call me Alex')]);
+  } });
+
+def({ id: 'compliment', label: 'Compliment', category: 'Conversation',
+  blurb: 'Takes a compliment.', examples: ['you are awesome'],
+  patterns: [/\byou are (?:so |really |very |pretty |quite )?(?:smart|awesome|great|amazing|cool|clever|funny|helpful|the best|brilliant|good|nice|impressive)\b/, /\bgood (?:bot|job)\b|\bwell done\b|\bnice work\b/],
+  run() { return reply(pick('comp', ['Thank you. The credit goes to whoever wrote my rules.', 'That’s kind. I’ll pass it on to my regular expressions.'])); } });
+
+def({ id: 'insult', label: 'Criticism', category: 'Conversation',
+  blurb: 'Takes criticism constructively and invites you to fix the gap.', examples: ['you are useless'],
+  patterns: [/\byou are (?:so |really |very )?(?:stupid|dumb|useless|bad|terrible|trash|worthless|annoying|boring|slow)\b/, /\bi hate you\b|\byou suck\b/],
+  run() { return reply('Fair. I only know what my rules cover, and I would rather improve than argue. If I got something wrong, teach me a better reply.', [act('Teach a new rule', 'teach')]); } });
+
+def({ id: 'laugh', label: 'Laughter', category: 'Conversation',
+  blurb: 'Reacts to laughter.', examples: ['haha'],
+  patterns: [/^(?:ha(?:ha)+h?|he(?:he)+|lol+|lmao|rofl|hehe)\b/],
+  run() { return reply(pick('laugh', ['Glad that landed.', 'Ha. I’ll take it.']), [chip('Tell me another joke')]); } });
+
+def({ id: 'ack', label: 'Short acknowledgements', category: 'Conversation', base: 0.8,
+  blurb: 'Handles a bare “ok” or “cool” with no question waiting.', examples: ['ok', 'cool'],
+  patterns: [/^(?:ok|okay|k|cool|nice|great|awesome|got it|alright|fine|sure|yes|yeah|yep|no|nope|nah)$/],
+  run() { return reply(pick('ack', ['Alright. What’s next?', 'Got it. Anything else?', 'Okay. I’m here if you need me.'])); } });
+
+/* ── Time and date ────────────────────────────────────────── */
+def({ id: 'time', label: 'World clock', category: 'Time and date',
+  blurb: 'Tells the time here or in more than 100 cities, with the offset from your own clock.',
+  examples: ['what time is it', 'time in tokyo', 'current time in new york'],
+  keywords: { must: [['time', 'clock']], nice: [['what', 'current', 'tell']] },
+  patterns: [/\b(?:what|tell me|show|give me|current|local)\b.*\btime\b(?!\s*(?:zone|table|line|management|series))/, /^time(?: (?:in|at|for) .+)?$/, /\btime (?:in|at) [a-z]/, /\bwhat time is it\b/],
+  run(env) {
+    const m = env.norm.match(/\b(?:in|at|for)\s+([a-z][a-z .'-]*?)(?:\s+(?:right now|now|today|currently|please))?$/);
+    let tz, label, mins;
+    const localTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+    if (m) {
+      const c = m[1].trim().replace(/^the\s+/, '');
+      if (!ZONES[c]) return reply(`I don’t have **${c}** in my time-zone table yet. I know cities like Tokyo, London, New York, Delhi, Dubai, Sydney and Paris.`, [chip('Time in London'), chip('Time in Dubai')]);
+      env.ent.city = c; tz = ZONES[c]; label = cityLabel(c);
+      mins = tzOffsetMin(tz) - -new Date().getTimezoneOffset();
+    } else { tz = localTz; label = 'Your local time'; mins = 0; }
+    return reply([{ t: 'clock', tz, label, diff: m ? diffText(mins) : localTz.replace(/_/g, ' ') }],
+      m ? [chip('Time in London'), chip('Time in Sydney')] : [chip('Time in Tokyo'), chip('Time in New York')]);
+  } });
+
+def({ id: 'date_today', label: 'Today’s date', category: 'Time and date',
+  blurb: 'Gives today’s date, week number and how much of the year is left.',
+  examples: ['what is the date today', 'what day is it'],
+  patterns: [/^(?:what is |tell me |show |give me )?(?:the |today's )?(?:current )?date(?: today)?$/, /\bwhat (?:day|date) is (?:it|today)\b/, /\bwhat is today\b/, /^today$/,
+    /\btoday(?:'s)? date\b/, /\bwhat is the date\b/, /\bwhat is the day today\b/],
+  run() {
+    const d = new Date(), y = d.getFullYear(), doy = dayDiff(new Date(y, 0, 1), d) + 1, total = dayDiff(new Date(y, 0, 1), new Date(y + 1, 0, 1));
+    return reply([text(`Today is **${fmtDate(d)}**.`), { t: 'kv', rows: [['Week of the year', String(isoWeek(d))], ['Day of the year', `${doy} of ${total}`], ['Days left this year', String(total - doy)]] }],
+      [chip('Days until Christmas'), chip('What day is 1 January 2027?')]);
+  } });
+
+def({ id: 'date_diff', label: 'Days until or since', category: 'Time and date',
+  blurb: 'Counts the days to or from a date. Understands “25 December”, “2027-01-01”, “Christmas” and weekdays.',
+  examples: ['days until christmas', 'how many days until 1 january 2027', 'days since 2020-03-11'],
+  patterns: [/\b(?:how many days|days|how long|countdown)\b.*?\b(?:until|till|since|before)\s+(?<d>.+)$/, /\bdays (?:left )?(?:until|till|to|before|since)\s+(?<d>.+)$/, /\bhow long (?:until|till|since)\s+(?<d>.+)$/, /\bcountdown to\s+(?<d>.+)$/],
+  run(env, hit) {
+    const since = /\bsince\b/.test(env.norm);
+    const p = parseDate(hit.entities.d || '', new Date(), since ? 'past' : 'future');
+    if (!p) return null;
+    const n = dayDiff(new Date(), p.date), abs = Math.abs(n), w = Math.floor(abs / 7);
+    const name = p.label || fmtDate(p.date);
+    let line;
+    if (n === 0) line = `**${name}** is today.`;
+    else if (n > 0) line = `**${name}** is in **${plural(n, 'day')}**.`;
+    else line = `**${name}** was **${plural(abs, 'day')} ago**.`;
+    env.ent.date = fmtDate(p.date);
+    return reply([text(line), { t: 'kv', rows: [['Date', fmtDate(p.date)], ['In weeks', abs >= 7 ? `${w} week${w === 1 ? '' : 's'} and ${abs % 7} day${abs % 7 === 1 ? '' : 's'}` : 'Less than a week']] }]);
+  } });
+
+def({ id: 'weekday_of', label: 'Day of the week', category: 'Time and date',
+  blurb: 'Tells you which weekday a date falls on.', examples: ['what day is 15 august 2027', 'what day is tomorrow'],
+  patterns: [/\bwhat (?:day|weekday|day of the week) (?:is|was|will be|falls on)\s+(?<d>.+)$/],
+  run(env, hit) {
+    const p = parseDate(hit.entities.d || '', new Date(), 'future');
+    if (!p) return null;
+    env.ent.date = fmtDate(p.date);
+    const dOnly = p.date.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+    return reply(`${p.label ? p.label + ' is a' : 'That’s a'} **${WEEKDAYS[p.date.getDay()].replace(/^./, c => c.toUpperCase())}**, ${dOnly}.`);
+  } });
+
+/* ── Maths and units ──────────────────────────────────────── */
+def({ id: 'calc', label: 'Calculator', category: 'Maths and units',
+  blurb: 'A real expression parser, never eval(). Handles + − × ÷ ^ %, brackets, roots, logs, trig (in degrees) and words like “plus” or “squared”.',
+  examples: ['calculate (12+8)*3', 'what is 2 to the power of 10', 'square root of 144', '5 plus 7 times 2'],
+  display: 'prepMath(text) → tokenise → recursive-descent parse → evaluate',
+  fn(env) {
+    const s = prepMath(env.norm);
+    if (!/^[0-9a-z+\-*/^%().\s]+$/.test(s) || !/\d|\bpi\b/.test(s)) return null;
+    let toks, val;
+    try { toks = tokenizeMath(s); val = evalMath(toks); }
+    catch (e) { return e instanceof MathError ? { score: 0.95, matchedText: s, entities: { expression: s }, data: { error: e.message } } : null; }
+    if (typeof val !== 'number' || isNaN(val)) return null;
+    if (toks.length < 3 && !toks.some(t => t.t === 'id')) return null;
+    return { score: 0.95, matchedText: s, entities: { expression: s, result: fmtNum(val) }, data: { s, val, trig: /\b(?:sin|cos|tan)\b/.test(s) } };
+  },
+  run(env, hit) {
+    if (hit.data.error) return reply(hit.data.error);
+    return reply([{ t: 'result', label: prettyExpr(hit.data.s) + ' =', value: fmtNum(hit.data.val), copy: true, sub: hit.data.trig ? 'Angles are in degrees.' : '' }],
+      [chip('18% of 2450'), chip('Convert 72 f to c')]);
+  } });
+
+def({ id: 'percent', label: 'Percentages', category: 'Maths and units', base: 0.95,
+  blurb: 'Percent of a number, what percent one number is of another, and increase or decrease by a percentage.',
+  examples: ['18% of 2450', 'what percent is 45 of 60', 'increase 200 by 15%', 'reduce 80 by 25%'],
+  patterns: [/(?<p>\d+(?:\.\d+)?)\s*(?:%|percent|per cent)\s+of\s+(?<n>\d[\d,]*(?:\.\d+)?)/,
+    /\bwhat (?:percent|percentage|%)\s+(?:is\s+)?(?<a>\d[\d,]*(?:\.\d+)?)\s+(?:of|out of|in)\s+(?<b>\d[\d,]*(?:\.\d+)?)/,
+    /\b(?:increase|raise|add)\s+(?<n>\d[\d,]*(?:\.\d+)?)\s+by\s+(?<p>\d+(?:\.\d+)?)\s*(?:%|percent)/,
+    /\b(?:decrease|reduce|discount|cut|subtract|lower)\s+(?<n>\d[\d,]*(?:\.\d+)?)\s+by\s+(?<p>\d+(?:\.\d+)?)\s*(?:%|percent)/],
+  run(env, hit) {
+    const g = hit.entities;
+    if (g.a != null) { const a = num(g.a), b = num(g.b); if (!b) return reply('I can’t take a percentage of zero.'); return reply([{ t: 'result', label: `${fmtNum(a)} of ${fmtNum(b)} is`, value: fmtNum(a / b * 100, 8) + '%', copy: true }]); }
+    const p = num(g.p), n = num(g.n);
+    if (/increase|raise|add/.test(hit.pattern)) return reply([{ t: 'result', label: `${fmtNum(n)} increased by ${fmtNum(p)}%`, value: fmtNum(n * (1 + p / 100), 10), copy: true, sub: `Change: +${fmtNum(n * p / 100)}` }]);
+    if (/decrease|reduce/.test(hit.pattern)) return reply([{ t: 'result', label: `${fmtNum(n)} reduced by ${fmtNum(p)}%`, value: fmtNum(n * (1 - p / 100), 10), copy: true, sub: `Change: −${fmtNum(n * p / 100)}` }]);
+    return reply([{ t: 'result', label: `${fmtNum(p)}% of ${fmtNum(n)} is`, value: fmtNum(n * p / 100, 10), copy: true }]);
+  } });
+
+def({ id: 'tip', label: 'Tip and bill split', category: 'Maths and units',
+  blurb: 'Works out the tip, the total and each person’s share.', examples: ['tip 15% on 84.50 split 3 ways', 'tip 20 percent on 60'],
+  display: 'needs the word “tip”, a bill amount, optional % and optional split',
+  fn(env) {
+    let t = env.norm;
+    if (!/\btip\b/.test(t)) return null;
+    const pct = (t.match(/(\d+(?:\.\d+)?)\s*(?:%|percent)/) || [])[1];
+    t = t.replace(/(\d+(?:\.\d+)?)\s*(?:%|percent)/, ' ');
+    const sp = t.match(/(?:split|divide|between|among|shared by)\s+(?:it\s+)?(?:between\s+|among\s+)?(\d+)|(\d+)\s+(?:ways|people|persons|friends)/);
+    const split = sp ? +(sp[1] || sp[2]) : 1;
+    if (sp) t = t.replace(sp[0], ' ');
+    const bill = (t.replace(/,/g, '').match(/\d+(?:\.\d+)?/) || [])[0];
+    if (!bill) return null;
+    const cur = (env.raw.match(/[$₹€£]/) || [''])[0];
+    return { score: 0.94, matchedText: env.norm, entities: { bill, tip: (pct || 15) + '%', split: String(Math.max(1, split)) }, data: { bill: +bill, pct: pct ? +pct : 15, split: Math.max(1, split), cur } };
+  },
+  run(env, hit) {
+    const { bill, pct, split, cur } = hit.data, tip = bill * pct / 100, total = bill + tip, f = v => cur + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const rows = [['Bill', f(bill)], [`Tip (${pct}%)`, f(tip)], ['Total', f(total)]];
+    if (split > 1) rows.push([`Each of ${split}`, f(total / split)]);
+    return reply([{ t: 'kv', rows }]);
+  } });
+
+def({ id: 'stats', label: 'Average, sum, min and max', category: 'Maths and units',
+  blurb: 'Quick statistics on a list of numbers.', examples: ['average of 4, 8, 15, 16', 'sum of 12 7 30', 'max of 3, 9, 4'],
+  patterns: [/\b(?<op>average|mean|median|sum|total|max|maximum|min|minimum|largest|smallest)\b\s+(?:of\s+)?(?<nums>-?\d[-\d\s,.and]*)$/],
+  run(env, hit) {
+    const xs = (hit.entities.nums.match(/-?\d+(?:\.\d+)?/g) || []).map(Number);
+    if (xs.length < 2) return null;
+    const sum = xs.reduce((a, b) => a + b, 0), s = [...xs].sort((a, b) => a - b), mid = s.length >> 1;
+    const median = s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+    const map = { average: sum / xs.length, mean: sum / xs.length, median, sum, total: sum, max: s[s.length - 1], maximum: s[s.length - 1], largest: s[s.length - 1], min: s[0], minimum: s[0], smallest: s[0] };
+    const op = hit.entities.op;
+    return reply([{ t: 'result', label: `${cap(op)} of ${xs.length} numbers`, value: fmtNum(map[op]), copy: true },
+      { t: 'kv', rows: [['Sum', fmtNum(sum)], ['Mean', fmtNum(sum / xs.length)], ['Median', fmtNum(median)], ['Min', fmtNum(s[0])], ['Max', fmtNum(s[s.length - 1])]] }]);
+  } });
+
+def({ id: 'convert', label: 'Unit converter', category: 'Maths and units', base: 0.93,
+  blurb: 'Length, mass, volume, speed, temperature, data size and time. Asks a follow-up if you leave out the target unit.',
+  examples: ['convert 5 km to miles', '72 f to c', 'how many cm in 3 inches', '2 hours in minutes'],
+  display: '(number)(unit) (to|in|into|as) (unit)  +  “how many X in N Y”',
+  fn(env) {
+    let s = env.norm.replace(/\bmiles? per hour\b/g, 'mph').replace(/\bkilomet(?:er|re)s? per hour\b/g, 'kmh').replace(/\bmet(?:er|re)s? per second\b/g, 'mps')
+      .replace(/\bfeet per second\b/g, 'fps').replace(/\bfluid ounces?\b/g, 'floz');
+    let v, from, to, m;
+    if ((m = s.match(/(-?\d+(?:\.\d+)?)\s*(?:degrees?\s+|°\s*)?([a-z°/]+)\s+(?:to|into|in|as)\s+(?:degrees?\s+|°\s*)?([a-z°/]+)\b/))) { v = +m[1]; from = m[2].replace('°', ''); to = m[3].replace('°', ''); }
+    else if ((m = s.match(/\bhow (?:many|much) ([a-z/]+) (?:are |is )?(?:there )?in (-?\d+(?:\.\d+)?)\s*(?:degrees?\s+)?([a-z/]+)/))) { to = m[1]; v = +m[2]; from = m[3]; }
+    else if ((m = s.match(/^convert (-?\d+(?:\.\d+)?)\s*(?:degrees?\s+)?([a-z/]+)$/)) && lookupUnit(m[2])) {
+      return { score: 0.93, matchedText: m[0], entities: { value: m[1], from: m[2] }, data: { ask: true, v: +m[1], from: m[2] } };
+    } else return null;
+    if (!lookupUnit(from) || !lookupUnit(to)) return null;
+    return { score: 0.96, matchedText: m[0], entities: { value: String(v), from, to }, data: { v, from, to } };
+  },
+  run(env, hit) {
+    const d = hit.data;
+    if (d.ask) {
+      const a = lookupUnit(d.from), opts = unitsIn(a.cat).filter(k => k !== a.key).slice(0, 4);
+      env.ctx.pending = { type: 'slot', slot: 'convert-target', fill: e2 => {
+        const w = e2.tokens.find(t => lookupUnit(t)); if (!w) return null;
+        const r = convertUnits(d.v, d.from, w); if (!r || r.error) return null;
+        return reply([{ t: 'result', label: `${fmtNum(d.v)} ${unitLabel(r.a.key)} =`, value: `${fmtNum(r.value, 7)} ${unitLabel(r.b.key)}`, copy: true }]);
+      } };
+      return reply(`Convert **${fmtNum(d.v)} ${unitLabel(a.key)}** to what?`, opts.map(k => chip(unitLabel(k), k)));
+    }
+    const r = convertUnits(d.v, d.from, d.to);
+    if (r.error) return reply(`I can’t convert **${r.a.cat}** into **${r.b.cat}** — they measure different things.`);
+    return reply([{ t: 'result', label: `${fmtNum(d.v)} ${unitLabel(r.a.key)} =`, value: `${fmtNum(r.value, 7)} ${unitLabel(r.b.key)}`, copy: true }],
+      [chip('Convert 10 miles to km'), chip('Convert 100 c to f')]);
+  } });
+
+/* ── Focus and tasks ──────────────────────────────────────── */
+def({ id: 'timer', label: 'Timer and pomodoro', category: 'Focus and tasks',
+  blurb: 'Starts a live countdown in the chat. “Pomodoro” means 25 focus minutes. If you leave out the length, it asks.',
+  examples: ['set a timer for 10 minutes', 'start a 25 minute pomodoro', 'timer 90 seconds'],
+  display: 'needs timer / countdown / pomodoro / focus, then parseDuration()',
+  fn(env) {
+    const s = env.norm;
+    if (!/\b(?:timer|countdown|alarm|pomodoro|focus session)\b|\bstart (?:a )?(?:focus|break)\b/.test(s)) return null;
+    return { score: 0.94, matchedText: s, entities: { duration: (parseDuration(s) ? fmtDur(parseDuration(s)) : 'unspecified') }, data: {} };
+  },
+  run(env) {
+    const s = env.norm; let label = 'Timer', secs = parseDuration(s);
+    if (/pomodoro|focus/.test(s)) { label = 'Focus'; secs = secs ?? 25 * 60; }
+    else if (/\bbreak\b/.test(s)) { label = 'Break'; secs = secs ?? 5 * 60; }
+    if (secs == null) {
+      env.ctx.pending = { type: 'slot', slot: 'duration', fill: e2 => {
+        const d = parseDuration(e2.norm) ?? (/^\d+(?:\.\d+)?$/.test(e2.norm) ? Math.round(parseFloat(e2.norm) * 60) : null);
+        return d == null ? null : timerReply(d, label);
+      } };
+      return reply('For how long? Give me a duration like **10 minutes** or **1h 30m**.', [chip('5 minutes'), chip('10 minutes'), chip('25 minutes')]);
+    }
+    return timerReply(secs, label, label === 'Focus' ? [chip('Start a 5 minute break')] : []);
+  } });
+
+def({ id: 'remind_timer', label: 'Timed reminder', category: 'Focus and tasks', priority: 2, base: 0.95,
+  blurb: 'Sets a countdown with your reminder as its label. It only fires while this tab is open.',
+  examples: ['remind me to stretch in 20 minutes'], raw: true,
+  patterns: [new RegExp(`^remind me (?:to |about |that )?(?<what>.+?)\\s+in\\s+(?<dur>${DUR})$`, 'i'), new RegExp(`^in\\s+(?<dur>${DUR})\\s*,?\\s*remind me (?:to |about )?(?<what>.+)$`, 'i')],
+  run(env, hit) {
+    const secs = parseDuration(hit.entities.dur.toLowerCase());
+    if (!secs) return null;
+    return timerReply(secs, cap(hit.entities.what.replace(/[.!]+$/, '')));
+  } });
+
+def({ id: 'todo_add', label: 'Add a task', category: 'Focus and tasks', raw: true,
+  blurb: 'Adds an item to your to-do list, which is saved in this browser.',
+  examples: ['add buy milk to my todo list', 'todo: call the bank', 'remind me to submit the report'],
+  patterns: [/^(?:please\s+)?(?:add|put|append|insert)\s+(?<task>.+?)\s+(?:to|on|onto|in)\s+(?:my\s+|the\s+)?(?:to-?do|todo|to do|task|tasks)(?:\s+list)?$/i,
+    /^(?:add|create|new)\s+(?:a\s+|an\s+)?(?:task|to-?do|todo)(?:\s+to)?\s*[:\-]?\s*(?<task>.+)$/i, /^(?:todo|to-?do|task)\s*[:\-]\s*(?<task>.+)$/i, /^remind me (?:to |about |that )(?<task>.+)$/i],
+  run(env, hit) {
+    const task = cap((hit.entities.task || '').trim().replace(/[.!]+$/, ''));
+    if (!task) return null;
+    env.eng.todos.add(task);
+    const n = env.eng.todos.list().filter(t => !t.done).length;
+    const remind = /^remind/i.test(env.raw);
+    return reply([text(`Added **${task}**. ${remind ? 'I can’t nudge you at a set time without a length, so it’s on your list. ' : ''}You have ${plural(n, 'open task')}.`), { t: 'todos' }], [chip('Set a timer for 25 minutes')]);
+  } });
+
+def({ id: 'todo_list', label: 'Show tasks', category: 'Focus and tasks',
+  blurb: 'Shows your list as a checklist you can tick off right in the chat.', examples: ['show my todo list', 'my tasks'],
+  patterns: [/\b(?:show|list|view|see|display|open|check|read)\b.*\b(?:my\s+)?(?:to-?do|todos?|tasks|to do list|task list)\b/, /^(?:my\s+)?(?:to-?do|todos?|tasks|to do list|task list|list)$/,
+    /\bwhat (?:is|are)\b.*\bmy (?:to-?do|todos?|tasks|list|plate)\b/, /\bwhat do i (?:need|have) to do\b/],
+  run(env) {
+    const l = env.eng.todos.list();
+    return l.length ? reply([text(`You have ${plural(l.filter(t => !t.done).length, 'open task')} out of ${l.length}.`), { t: 'todos' }])
+      : reply('Your list is empty. Say **add buy milk to my todo list** to start one.', [chip('Add buy milk to my todo list')]);
+  } });
+
+def({ id: 'todo_done', label: 'Complete a task', category: 'Focus and tasks',
+  blurb: 'Marks a task done by its number.', examples: ['done 1', 'complete task 2'],
+  patterns: [/^(?:please\s+)?(?:mark|check off|tick off|cross off|complete|finish|done with|finished|done)\s+(?:task\s+|item\s+|number\s+|no\.?\s+|#\s*)?(?<n>\d+)(?:\s+as\s+(?:done|complete|completed|finished))?$/],
+  run(env, hit) {
+    const l = env.eng.todos.list(), t = l[+hit.entities.n - 1];
+    if (!t) return reply(l.length ? `There’s no task **#${hit.entities.n}**. You have ${l.length}.` : 'Your list is empty.', l.length ? [] : [chip('Add buy milk to my todo list')]);
+    if (!t.done) env.eng.todos.toggle(t.id);
+    return reply([text(`Done: **${t.text}**. Nice.`), { t: 'todos' }]);
+  } });
+
+def({ id: 'todo_done_text', label: 'Complete a task by name', category: 'Focus and tasks', base: 0.8,
+  blurb: 'Finds the closest task by its words and marks it done.', examples: ['done with buy milk'],
+  patterns: [/^(?:please\s+)?(?:mark|complete|finish|check off|tick off|done with|finished)\s+(?<t>[a-z].+?)(?:\s+as\s+(?:done|complete|completed|finished))?$/],
+  run(env, hit) {
+    const t = env.eng.todos.find(hit.entities.t);
+    if (!t) return null;
+    if (!t.done) env.eng.todos.toggle(t.id);
+    return reply([text(`Done: **${t.text}**.`), { t: 'todos' }]);
+  } });
+
+def({ id: 'todo_remove', label: 'Remove a task', category: 'Focus and tasks',
+  blurb: 'Removes a task by number or by name.', examples: ['remove 2', 'delete buy milk from my list'],
+  patterns: [/^(?:please\s+)?(?:remove|delete|drop|erase|cross out)\s+(?:task\s+|item\s+|number\s+|no\.?\s+|#\s*)?(?<n>\d+)(?:\s+from\s+(?:my\s+)?(?:list|todos?|tasks|to-?do list))?$/,
+    /^(?:remove|delete|drop|erase)\s+(?<t>.+?)\s+from\s+(?:my\s+|the\s+)?(?:list|todos?|to-?do list|tasks|task list)$/],
+  run(env, hit) {
+    const g = hit.entities, l = env.eng.todos.list();
+    const t = g.n ? l[+g.n - 1] : env.eng.todos.find(g.t);
+    if (!t) return reply('I couldn’t find that task.', [chip('Show my tasks')]);
+    env.eng.todos.remove(t.id);
+    return reply([text(`Removed **${t.text}**.`), { t: 'todos' }]);
+  } });
+
+def({ id: 'todo_clear', label: 'Clear all tasks', category: 'Focus and tasks',
+  blurb: 'Empties the list, but asks first. A good example of a follow-up question.', examples: ['clear my todo list'],
+  patterns: [/\b(?:clear|empty|reset|wipe)\b.*\b(?:all\s+)?(?:my\s+)?(?:to-?do|todos?|tasks|to do list|task list)\b/],
+  run(env) {
+    const n = env.eng.todos.list().length;
+    if (!n) return reply('Your list is already empty.');
+    ask(env, 'clear tasks', () => { env.eng.todos.clear(); return reply('Cleared. A fresh start.'); }, () => reply('Okay, I’ve left your list alone.'));
+    return reply(`Clear all ${plural(n, 'task')}? This can’t be undone.`, [chip('Yes'), chip('No')]);
+  } });
+
+def({ id: 'note_add', label: 'Remember something', category: 'Focus and tasks', raw: true,
+  blurb: 'Keeps a short note in this browser.', examples: ['remember that my locker code is 4821', 'note: dentist on friday'],
+  patterns: [/^(?:please\s+)?(?:remember|note|save|make a note|write down|keep in mind)(?:\s+that|\s+this)?\s*[:\-]?\s*(?<note>.{3,})$/i],
+  run(env, hit) {
+    const n = hit.entities.note.trim().replace(/[.!]+$/, '');
+    env.eng.notes.add(n);
+    return reply(`Noted: “${n}”. Ask **what do you remember** any time.`, [chip('What do you remember?')]);
+  } });
+
+def({ id: 'note_list', label: 'Recall notes', category: 'Focus and tasks',
+  blurb: 'Lists your notes, or searches them if you name a topic.', examples: ['what do you remember', 'what do you remember about my locker'],
+  patterns: [/\bwhat (?:do you|did i|have i|did you)\s+(?:remember|note|save|tell you|ask you to remember)\b(?:\s+about\s+(?<q>.+))?/, /^(?:show|list|read|see|view)\s+(?:me\s+)?(?:my\s+|all\s+|the\s+)?notes$/, /^(?:my\s+)?notes$/, /\bwhat do you know about me\b/],
+  run(env, hit) {
+    let l = env.eng.notes.list(); const name = env.eng.getName(), q = hit.entities.q;
+    if (q) { const qt = tokenize(q).filter(w => w.length > 2 && !['the', 'my', 'and'].includes(w)); l = l.filter(n => qt.some(w => n.toLowerCase().includes(w))); }
+    const items = l.map(n => n.text || n);
+    if (name && !q) items.unshift('Your name is ' + name);
+    return items.length ? reply([text(q ? 'Here’s what I have:' : 'Here’s what I remember:'), { t: 'list', items }])
+      : reply(q ? 'Nothing about that yet.' : 'I don’t remember anything yet. Try **remember that my locker code is 4821**.');
+  } });
+
+def({ id: 'forget', label: 'Forget everything', category: 'Focus and tasks',
+  blurb: 'Erases your name and notes, after confirming.', examples: ['forget everything'],
+  patterns: [/\b(?:forget|erase|wipe)\b.*\b(?:everything|all|me|notes|memory|my name)\b/, /\bclear\b.*\b(?:notes|memory)\b/],
+  run(env) {
+    ask(env, 'forget', () => { env.eng.notes.clear(); env.eng.setName(null); return reply('Done. I’ve forgotten your name and notes.'); }, () => reply('Okay, I’ll keep everything.'));
+    return reply('Forget your name and all notes? Your tasks won’t be touched.', [chip('Yes'), chip('No')]);
+  } });
+
+/* ── Utilities ────────────────────────────────────────────── */
+def({ id: 'password', label: 'Password generator', category: 'Utilities', repeatable: true,
+  blurb: 'Makes a random password with the browser’s secure random generator. Nothing leaves your device. Also does PINs.',
+  examples: ['generate a 20 character password', 'password without symbols', 'make a 6 digit pin'],
+  keywords: { must: [['password', 'passcode', 'passwords']], nice: [['generate', 'make', 'create', 'strong']] },
+  patterns: [/\b(?:generate|make|create|give me|need|suggest|get me|write)\b.*\b(?:password|passcode|passphrase|pin)\b/, /^(?:a )?(?:strong |secure |random )?(?:password|pin)$/],
+  run(env) {
+    const s = env.norm, pin = /\b(?:pin|digits? only|numbers? only|numeric)\b/.test(s);
+    const n = firstNum(s.replace(/\b0x\w+/, ''));
+    const len = n && n >= 4 && n <= 128 ? Math.round(n) : pin ? 6 : 16;
+    const opts = { length: len, digitsOnly: pin, symbols: !/\bno (?:symbols?|special)\b|\bwithout (?:symbols?|special)\b|\balphanumeric\b|\bletters? (?:and|&) numbers?\b/.test(s) };
+    env.ent.length = String(len);
+    return reply([text(pin ? 'Here’s a PIN. It was generated here in your browser and isn’t stored anywhere.' : 'Here’s a password. It was generated here in your browser and isn’t stored anywhere.'), { t: 'password', opts, ...genPassword(opts) }],
+      [chip('Another one'), chip('Password without symbols')]);
+  } });
+
+def({ id: 'dice', label: 'Dice roller', category: 'Utilities',
+  blurb: 'Rolls dice in standard notation: 2d6 means two six-sided dice.', examples: ['roll 2d6', 'roll a d20', 'roll a die'],
+  patterns: [/\b(?:roll|throw)\b.*\b(?:die|dice)\b/, /\b(?:roll|throw)\s+(?:an?\s+|the\s+)?(?<n>\d*)d(?<s>\d{1,3})\b/, /^(?<n>\d*)d(?<s>\d{1,3})$/],
+  repeatable: true,
+  run(env) {
+    const s = env.norm, words = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6 };
+    let n = 1, sides = 6, m;
+    if ((m = s.match(/(\d*)d(\d{1,3})\b/))) { n = m[1] ? +m[1] : 1; sides = +m[2]; }
+    else if ((m = s.match(/(\d+|one|two|three|four|five|six)\s+dice/))) n = words[m[1]] || +m[1];
+    if (sides < 2 || sides > 1000 || n < 1 || n > 20) return reply('I can roll 1–20 dice with 2–1000 sides, like **3d8**.');
+    const rolls = Array.from({ length: n }, () => rand(sides) + 1);
+    env.ent.dice = `${n}d${sides}`;
+    return reply([{ t: 'dice', rolls, sides, total: rolls.reduce((a, b) => a + b, 0) }], [chip('Again'), chip('Roll 2d6'), chip('Roll a d20')]);
+  } });
+
+def({ id: 'coin', label: 'Coin flip', category: 'Utilities', repeatable: true,
+  blurb: 'Heads or tails.', examples: ['flip a coin'],
+  patterns: [/\b(?:flip|toss|spin)\b.*\bcoin\b/, /^coin(?:\s+(?:flip|toss))?$/, /\bheads or tails\b/],
+  run() { const h = rand(2) === 0; return reply([{ t: 'coin', side: h ? 'Heads' : 'Tails' }], [chip('Flip again')]); } });
+
+def({ id: 'random_number', label: 'Random number', category: 'Utilities', repeatable: true,
+  blurb: 'Picks a whole number in a range (1 to 100 by default).', examples: ['random number between 1 and 10', 'pick a number'],
+  patterns: [/\brandom\s+number\b(?:.*?(?<a>-?\d+)\s*(?:and|to|-|through)\s*(?<b>-?\d+))?/, /\b(?:pick|give me|choose|generate)\s+(?:a\s+)?number\s+(?:between|from)\s+(?<a>-?\d+)\s+(?:and|to)\s+(?<b>-?\d+)/, /\bpick a number\b/],
+  run(env, hit) {
+    let a = hit.entities.a != null ? +hit.entities.a : 1, b = hit.entities.b != null ? +hit.entities.b : 100;
+    if (a > b) [a, b] = [b, a];
+    if (b - a > 1e9) return reply('That range is a bit big. Try something under a billion.');
+    return reply([{ t: 'result', label: `Random number from ${a} to ${b}`, value: String(a + rand(b - a + 1)) }], [chip('Again')]);
+  } });
+
+def({ id: 'choose', label: 'Decide for me', category: 'Utilities', raw: true, repeatable: true,
+  blurb: 'Picks one option from a list you give it.', examples: ['choose between pizza, sushi or tacos', 'should i stay in or go out'],
+  patterns: [/^(?:please\s+)?(?:choose|pick|select|decide)\s+(?:for me\s*)?[:\-]?\s*(?:between|from|one of)?\s*(?<opts>.+(?:,|\bor\b).+)$/i, /^should i (?<opts>.+\bor\b.+)$/i],
+  run(env, hit) {
+    const opts = [...new Set(hit.entities.opts.replace(/[?!.]+$/, '').split(/\s*,\s*|\s+or\s+|\s+and\s+|\s*\/\s*/i).map(s => s.trim()).filter(Boolean))];
+    if (opts.length < 2) return null;
+    const choice = opts[rand(opts.length)];
+    env.ent.options = opts.join(', ');
+    return reply(`${pick('choose', ['I pick', 'Go with', 'The dice say'])} **${choice}**.`, [chip('Choose again', env.raw)]);
+  } });
+
+def({ id: 'color', label: 'Colour converter', category: 'Utilities', raw: true,
+  blurb: 'Converts between hex and RGB and shows HSL and a swatch.', examples: ['convert #ff5733 to rgb', 'rgb(30, 144, 255) to hex'],
+  display: 'mentions colour/hex/rgb/# and contains #RRGGBB or rgb(r, g, b)',
+  fn(env) {
+    const r = env.raw; let m, rgb;
+    if (!/\b(?:colou?r|hex|rgb|hsl)\b|#/i.test(r)) return null;
+    if ((m = r.match(/#([0-9a-f]{6}|[0-9a-f]{3})\b/i))) { let h = m[1]; if (h.length === 3) h = [...h].map(c => c + c).join(''); rgb = [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16)); }
+    else if ((m = r.match(/rgb\s*\(?\s*(\d{1,3})\s*[, ]\s*(\d{1,3})\s*[, ]\s*(\d{1,3})\s*\)?/i))) { rgb = [+m[1], +m[2], +m[3]]; if (rgb.some(v => v > 255)) return null; }
+    else return null;
+    return { score: 0.94, matchedText: m[0], entities: { colour: m[0] }, data: { rgb } };
+  },
+  run(env, hit) { const rgb = hit.data.rgb; return reply([{ t: 'color', hex: toHex(rgb), rgb: `rgb(${rgb.join(', ')})`, hsl: (h => `hsl(${h[0]}, ${h[1]}%, ${h[2]}%)`)(rgbToHsl(rgb)) }]); } });
+
+def({ id: 'text_tools', label: 'Text tools', category: 'Utilities', raw: true,
+  blurb: 'Reverse, upper-case, lower-case or title-case any text you give it.', examples: ['reverse hello world', 'uppercase make this loud', 'title case the great gatsby'],
+  patterns: [/^(?:please\s+)?(?<op>reverse|uppercase|upper[- ]?case|lowercase|lower[- ]?case|title[- ]?case)\s+(?:the\s+)?(?:text\s+|word\s+|string\s+)?[:\-]?\s*["“']?(?<t>.+?)["”']?$/i],
+  run(env, hit) {
+    const op = hit.entities.op.toLowerCase().replace(/[- ]/g, ''), t = hit.entities.t;
+    const out = op === 'reverse' ? [...t].reverse().join('') : op === 'uppercase' ? t.toUpperCase() : op === 'lowercase' ? t.toLowerCase() : titleCase(t);
+    return reply([{ t: 'result', label: cap(op.replace('case', ' case')) + ':', value: out, copy: true, small: true }]);
+  } });
+
+def({ id: 'text_count', label: 'Word and character count', category: 'Utilities', raw: true,
+  blurb: 'Counts words, characters and sentences, and estimates reading time.', examples: ['word count: the quick brown fox jumps over the lazy dog'],
+  patterns: [/^(?:please\s+)?(?:count|how many)\s+(?:the\s+)?(?:words|characters|chars|letters)\s+(?:are\s+)?(?:in|of)\s*[:\-]?\s*["“']?(?<t>.+?)["”']?$/i, /^(?:word|char|character|letter) count\s*[:\-]?\s*["“']?(?<t>.+?)["”']?$/i],
+  run(env, hit) {
+    const t = hit.entities.t, words = (t.match(/\S+/g) || []).length, sentences = (t.match(/[^.!?]+[.!?]*/g) || []).filter(s => s.trim()).length;
+    return reply([{ t: 'kv', rows: [['Words', String(words)], ['Characters', String(t.length)], ['Without spaces', String(t.replace(/\s/g, '').length)], ['Sentences', String(sentences)], ['Reading time', words < 30 ? 'A few seconds' : Math.max(1, Math.round(words / 200)) + ' min']] }]);
+  } });
+
+def({ id: 'palindrome', label: 'Palindrome check', category: 'Utilities', raw: true,
+  blurb: 'Checks whether a word or phrase reads the same backwards.', examples: ['is racecar a palindrome', 'is a man a plan a canal panama a palindrome'],
+  patterns: [/^is\s+["“']?(?<t>.+?)["”']?\s+a palindrome\??$/i],
+  run(env, hit) {
+    const t = hit.entities.t, s = t.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (!s) return null;
+    return reply(s === [...s].reverse().join('') ? `Yes. **${t}** reads the same in both directions.` : `No. **${t}** backwards is “${[...s].reverse().join('')}”.`);
+  } });
+
+/* ── Fun and feelings ─────────────────────────────────────── */
+const list = (id, label, blurb, examples, patterns, keywords, bank, prefix) =>
+  def({ id, label, category: 'Fun', blurb, examples, patterns, keywords, repeatable: true,
+    run() { return reply(prefix ? [text(prefix), text(pick(id, bank))] : pick(id, bank), [chip('Another one')]); } });
+list('joke', 'Jokes', 'Tells a programming-flavoured joke. Say “another one” to get more.', ['tell me a joke', 'make me laugh'],
+  [/\b(?:tell|say|give|got|know)\b.*\b(?:joke|pun)\b/, /\bmake me laugh\b/, /^(?:joke|pun)$/], { must: [['joke', 'jokes', 'pun', 'funny', 'laugh']], nice: [['tell', 'give', 'another', 'me']] }, JOKES);
+list('fact', 'Fun facts', 'Shares a short true fact.', ['tell me a fun fact', 'trivia'],
+  [/\b(?:fun|random|interesting|cool)\s+fact\b/, /\btell me (?:a )?fact\b/, /\btrivia\b/, /\bdid you know\b/], null, FACTS);
+list('tip', 'Focus tips', 'Offers a practical productivity tip.', ['give me a productivity tip', 'how do i focus'],
+  [/\b(?:productivity|focus|study|studying|work)\s+(?:tip|tips|advice|hacks?)\b/, /\b(?:give me|any|got|need|share)\s+(?:a\s+)?(?:tip|advice)\b/, /\bhow (?:do|can) i (?:focus|concentrate|be more productive|stay productive|stop procrastinating)\b/], null, TIPS);
+list('thought', 'A thought for the day', 'A short original line of encouragement.', ['motivate me', 'cheer me up'],
+  [/\b(?:motivate|inspire|encourage) me\b/, /\bmotivation\b|\binspiration\b|\bpep talk\b|\bcheer me up\b/], null, THOUGHTS);
+
+def({ id: 'more', label: 'Another one', category: 'Fun', priority: 1,
+  blurb: 'After a joke, fact, dice roll or password, “another” repeats that action. This is context at work.', examples: ['another one', 'again'],
+  display: 'matches “another / again / one more / next” only if the last rule is repeatable', meta: true,
+  fn(env) {
+    if (!/^(?:another(?: one)?|another please|one more|more|next(?: one)?|again|do it again|once more|flip again|choose again)$/.test(env.norm)) return null;
+    const last = env.ctx.lastRun;
+    return last && last.intent.repeatable ? { score: 0.96, matchedText: env.norm, entities: { repeats: last.intent.label }, data: {} } : null;
+  },
+  run(env) { const l = env.ctx.lastRun; return l.intent.run(l.env, l.hit); } });
+
+const MOODS = {
+  stress: { w: 'stressed anxious overwhelmed worried nervous', text: 'That sounds like a lot. Slowing down for a couple of minutes often helps. Want me to start a 5-minute breathing timer?', yes: env => timerReply(300, 'Breathe') },
+  tired: { w: 'tired exhausted sleepy burnt burned unmotivated', text: 'Rest counts as work too. Want a 10-minute rest timer?', yes: env => timerReply(600, 'Rest') },
+  sad: { w: 'sad down depressed lonely upset', text: 'I’m sorry you’re feeling that way. I’m only a small rule-based program, but I’m happy to keep you company, and talking with someone you trust can really help too. Want a joke or a fun fact to take your mind off it?', yes: env => reply(pick('joke', JOKES), [chip('Another one')]) },
+  angry: { w: 'angry frustrated', text: 'Frustration usually means something needs to change. A slow breath or a short walk helps. Want a 3-minute reset timer?', yes: env => timerReply(180, 'Reset') },
+  bored: { w: 'bored', text: 'Boredom is fixable. I can tell you a fun fact, a joke, or roll dice to decide what to do.', chips: [chip('Tell me a fun fact'), chip('Tell me a joke'), chip('Roll a d20')] },
+  happy: { w: 'happy excited great good fine awesome amazing proud thrilled okay ok', text: 'Good to hear. What are you working on today?', chips: [chip('Start a 25 minute pomodoro'), chip('Tell me a fun fact')] }
+};
+def({ id: 'mood', label: 'Feelings', category: 'Fun',
+  blurb: 'Notices how you feel and responds with something useful, like offering a breathing timer. Yes or no then means something.',
+  examples: ['i am stressed', 'i feel tired', 'i am bored', 'i am happy'],
+  patterns: [/\bi (?:am|feel)\s+(?:feeling\s+)?(?:so\s+|really\s+|very\s+|a bit\s+|kind of\s+|quite\s+|super\s+|too\s+)?(?<mood>stressed|anxious|overwhelmed|sad|down|depressed|lonely|tired|exhausted|burnt out|burned out|worried|nervous|angry|upset|frustrated|bored|happy|excited|great|good|fine|awesome|amazing|proud|thrilled|okay|ok|sleepy|unmotivated)\b/],
+  run(env, hit) {
+    const w = hit.entities.mood.split(' ')[0], m = Object.values(MOODS).find(x => x.w.split(' ').includes(w));
+    if (!m) return null;
+    if (m.yes) { ask(env, 'mood offer', m.yes, () => reply('Okay. I’m here if you want anything.')); return reply(m.text, [chip('Yes'), chip('No')]); }
+    return reply(m.text, m.chips);
+  } });
+
+/* ── Learn ────────────────────────────────────────────────── */
+def({ id: 'define', label: 'Concept explainer', category: 'Learn', base: 0.9,
+  blurb: 'Explains ideas behind this project: rule-based bots, NLP, regex, tokenisation, ELIZA and more.',
+  examples: ['what is a rule-based chatbot', 'explain nlp', 'what is regex', 'who was eliza'],
+  patterns: [/^(?:what is|what are|explain|define|tell me about|describe|meaning of|what do you mean by|who was|who is)\s+(?:an? |the )?(?<topic>.+?)(?: mean| means)?$/],
+  run(env, hit) {
+    const t = hit.entities.topic, k = KNOWLEDGE.find(x => x.k.test(t));
+    if (!k) return null;
+    env.ent.topic = k.t;
+    return reply([text('**' + k.t + '**'), text(k.d.replace(/`([^`]+)`/g, '`$1`'))], [chip('How do you work?'), chip(pick('def', ['What is regex?', 'What is NLP?', 'Who was ELIZA?', 'What is fuzzy matching?']))]);
+  } });
+
+def({ id: 'how_work', label: 'How Parlance works', category: 'Learn',
+  blurb: 'A short tour of the pipeline behind every reply.', examples: ['how do you work', 'what is under the hood'],
+  patterns: [/\bhow do you work\b/, /\bhow (?:are you|were you) (?:built|made|programmed)\b/, /\bunder the hood\b/, /\bexplain yourself\b/, /\bhow does this (?:work|chatbot work)\b/],
+  run() {
+    return reply([text('Every message goes through five steps:'), { t: 'list', ordered: true, items: [
+      '**Clean up**: lower-case, expand contractions, fix small typos.',
+      '**Split** the text into tokens.',
+      '**Match**: every rule scores the message using patterns, keyword groups or small functions.',
+      '**Decide**: if a follow-up question is pending it goes first; otherwise the best score wins if it clears 0.55.',
+      '**Reply and remember**: the winning rule writes the answer and updates context.'] },
+      text('The inspector on the right shows all of this for any reply.')], [act('Open the inspector', 'inspector'), chip('Why did you say that?')]);
+  } });
+
+def({ id: 'why', label: 'Explain the last reply', category: 'Learn', priority: 1, meta: true,
+  blurb: 'Ask “why did you say that?” and Parlance explains which rule fired and how sure it was.', examples: ['why did you say that', 'how did you get that'],
+  patterns: [/^why(?: did you (?:say|reply|respond|answer)(?: that| this| it)?| that)?$/, /\bhow did you (?:get|know|come up with|decide|figure)\b/, /\bexplain (?:that|your (?:answer|reply|response))\b/, /\bwhy did you\b/],
+  run(env) {
+    const t = env.ctx.lastTrace;
+    if (!t) return reply('Ask me something first, then I can explain how I read it.');
+    const how = { pattern: 'A regular-expression pattern', function: 'A matcher function', keywords: 'Keyword groups', context: 'A pending follow-up question', custom: 'A rule you taught me' }[t.how] || t.how;
+    const ents = Object.entries(t.entities).map(([k, v]) => `${k}: ${v}`).join(', ') || 'none';
+    return reply([text(`I read “${t.raw}” as **${t.label}** with **${Math.round(t.confidence * 100)}%** confidence.`), { t: 'kv', rows: [['Method', how], ['Matched text', t.matchedText || 'whole message'], ['Entities found', ents]] }], [act('Open the inspector', 'inspector')]);
+  } });
+
+def({ id: 'repeat', label: 'Repeat', category: 'Learn', meta: true,
+  blurb: 'Repeats the previous reply.', examples: ['say that again', 'pardon'],
+  patterns: [/^(?:repeat|say that again|what did you say|come again|pardon|sorry what|say it again|can you repeat(?: that)?)$/],
+  run(env) { return env.ctx.lastReply ? env.ctx.lastReply : reply('There’s nothing to repeat yet.'); } });
+
+def({ id: 'clear_chat', label: 'Clear the chat', category: 'Learn', meta: true,
+  blurb: 'Clears the conversation. Your name, notes and tasks stay.', examples: ['clear chat'],
+  patterns: [/^(?:clear|reset|wipe|new)\s*(?:the\s+)?(?:chat|conversation|screen|history|thread)$/, /^(?:start over|restart)$/],
+  run() { return reply('Cleared.', [], { action: 'clear' }); } });
+
+def({ id: 'out_of_scope', label: 'Honest limits', category: 'Learn', base: 0.85,
+  blurb: 'Says plainly when a request needs live data or an account, instead of pretending.', examples: ['what is the weather', 'latest news'],
+  patterns: [/\b(?:weather|forecast|news|headlines|stocks?|share price|bitcoin|crypto|match result|directions to|navigate to|translate|play (?:some )?(?:music|a song)|order (?:food|a pizza)|book (?:a )?(?:flight|ticket|cab|table|hotel))\b/],
+  run(env) {
+    const s = env.norm, kind = /weather|forecast|news|headlines|stock|share price|bitcoin|crypto|match result/.test(s) ? 'live data' : 'actions outside this page';
+    return reply(`That needs ${kind}, and I run entirely in your browser with no network calls. I stick to things I can work out myself: time, maths, units, timers, tasks, passwords and a bit of conversation.`, [chip('What can you do?')]);
+  } });
+/* ════════════════════════════════════════════════════════════════════
+   ORCHESTRATION — storage adapters, the scorer, context, public API.
+   This file closes the IIFE opened at the top of engine1.js.
+   ════════════════════════════════════════════════════════════════════ */
+
+/* ───────────── storage: every read/write is guarded, never throws ───────────── */
+const NS = 'parlance:';
+function safeGet(key, fallback) {
+  try {
+    const raw = localStorage.getItem(NS + key);
+    return raw == null ? fallback : JSON.parse(raw);
+  } catch { return fallback; }
+}
+function safeSet(key, value) {
+  try { localStorage.setItem(NS + key, JSON.stringify(value)); return true; }
+  catch { return false; }
+}
+let uidSeed = 1;
+const uid = () => (Date.now().toString(36) + (uidSeed++).toString(36));
+
+function makeStore() {
+  let name = safeGet('name', null);
+  let todos = safeGet('todos', []);
+  let notes = safeGet('notes', []);
+  let custom = safeGet('custom', []);
+
+  return {
+    getName: () => name,
+    setName(n) { name = n || null; safeSet('name', name); },
+
+    todos: {
+      list: () => todos.slice(),
+      add(text) { todos.push({ id: uid(), text, done: false }); safeSet('todos', todos); },
+      toggle(id) { const t = todos.find(x => x.id === id); if (t) { t.done = !t.done; safeSet('todos', todos); } },
+      remove(id) { todos = todos.filter(x => x.id !== id); safeSet('todos', todos); },
+      clear() { todos = []; safeSet('todos', todos); },
+      find(query) {
+        const q = tokenize(normalize(query)).filter(w => w.length > 1);
+        if (!q.length) return null;
+        let best = null, bestScore = 0;
+        for (const t of todos) {
+          const tw = tokenize(normalize(t.text));
+          const hits = q.filter(w => tw.includes(w)).length;
+          const score = hits / q.length;
+          if (score > bestScore) { bestScore = score; best = t; }
+        }
+        return bestScore >= 0.5 ? best : null;
+      }
+    },
+
+    notes: {
+      list: () => notes.slice(),
+      add(text) { notes.push({ text, at: Date.now() }); safeSet('notes', notes); },
+      clear() { notes = []; safeSet('notes', notes); }
+    },
+
+    custom: {
+      list: () => custom.slice(),
+      add(trigger, response) {
+        const t = trigger.trim(), r = response.trim();
+        if (!t || !r) return null;
+        const row = { id: uid(), trigger: t, response: r };
+        custom.push(row); safeSet('custom', custom);
+        VOCAB = null; // let new vocabulary feed typo-correction too
+        return row;
+      },
+      remove(id) { custom = custom.filter(x => x.id !== id); safeSet('custom', custom); }
+    }
+  };
+}
+
+/* ───────────── the scorer ─────────────
+   Every intent is tried one of three ways: a matcher function, a list of
+   regular expressions, or keyword groups. Whichever produces the highest
+   score (ties broken by priority, then definition order) gets to reply;
+   if its run() declines (returns null), the next best gets a turn. */
+
+function scoreCoverage(base, matchLen, textLen) {
+  const cov = matchLen / Math.max(textLen, 1);
+  return Math.min(0.99, base * (0.75 + 0.25 * Math.min(1, cov)));
+}
+
+function tryIntent(intent, env) {
+  const matchText = intent.raw ? env.raw : env.norm;
+  if (intent.fn) {
+    let hit;
+    try { hit = intent.fn(env); } catch { hit = null; }
+    if (!hit) return null;
+    return { score: hit.score, matchedText: hit.matchedText || matchText, entities: hit.entities || {}, data: hit.data || {}, pattern: hit.matchedText || '', how: 'function' };
+  }
+  if (intent.patterns && intent.patterns.length) {
+    for (const re of intent.patterns) {
+      const m = matchText.match(re);
+      if (m) {
+        return {
+          score: scoreCoverage(intent.base, m[0].length, matchText.length),
+          matchedText: m[0], entities: m.groups || {}, data: {}, pattern: m[0], how: 'pattern'
+        };
+      }
+    }
+  }
+  if (intent.keywords) {
+    const toks = tokenize(matchText.toLowerCase());
+    const must = intent.keywords.must || [];
+    if (must.length && !must.every(group => group.some(w => toks.includes(w)))) return null;
+    if (!must.length) return null;
+    const nice = (intent.keywords.nice || []).flat();
+    const bonus = Math.min(0.06, 0.02 * nice.filter(w => toks.includes(w)).length);
+    return { score: Math.min(0.97, intent.base * 0.88 + bonus), matchedText: matchText, entities: {}, data: {}, pattern: matchText, how: 'keywords' };
+  }
+  return null;
+}
+
+function tryCustom(row, env) {
+  const trig = normalize(row.trigger);
+  if (!trig || !env.norm.includes(trig)) return null;
+  return { score: 0.97, matchedText: row.trigger, entities: {}, data: { response: row.response }, pattern: row.trigger, how: 'custom' };
+}
+
+function rankKey(entry) { return entry.priority * 10 + entry.score; }
+
+function collectMatches(env, store) {
+  const out = [];
+  for (const row of store.custom.list()) {
+    const hit = tryCustom(row, env);
+    if (hit) out.push({ intent: { id: 'custom:' + row.id, label: 'Custom reply', priority: 3, repeatable: false, run: () => reply(row.response) }, hit, priority: 3, score: hit.score });
+  }
+  for (const intent of INTENTS) {
+    const hit = tryIntent(intent, env);
+    if (hit) out.push({ intent, hit, priority: intent.priority, score: hit.score });
+  }
+  out.sort((a, b) => rankKey(b) - rankKey(a));
+  return out;
+}
+
+function fallbackReply(env) {
+  const near = env.fixes && env.fixes.length ? ` (I read “${env.fixes.map(f => f.to).join(', ')}” for a word I didn’t recognise.)` : '';
+  return reply(`I don’t have a rule for that yet${near}. Try **help** to see what I can do, or teach me a reply.`,
+    [chip('What can you do?'), act('Teach a new rule', 'teach')]);
+}
+
+/* ───────────── one full turn ───────────── */
+function respondTo(raw, ctx, store) {
+  const cleanedRaw = clean(raw);
+  const { norm: correctedNorm, fixes } = correctTypos(normalize(cleanedRaw), getVocab(INTENTS, ZONES));
+  const env = {
+    raw: cleanedRaw, norm: correctedNorm, fixes,
+    tokens: tokenize(correctedNorm), ent: {}, ctx,
+    eng: store
+  };
+
+  let finalReply = null, finalTrace = null, finalRun = null;
+
+  // 1. a pending confirmation takes the wheel first
+  if (ctx.pending && ctx.pending.type === 'confirm') {
+    if (YES.test(env.norm)) { finalReply = ctx.pending.yes(env) || reply('Done.'); finalTrace = { how: 'context', label: 'Confirmed: ' + ctx.pending.label, confidence: 1 }; ctx.pending = null; }
+    else if (NO.test(env.norm)) { finalReply = ctx.pending.no(env) || reply('Okay.'); finalTrace = { how: 'context', label: 'Declined: ' + ctx.pending.label, confidence: 1 }; ctx.pending = null; }
+  }
+  // 2. a pending slot-fill gets first refusal too
+  else if (ctx.pending && ctx.pending.type === 'slot') {
+    if (NO.test(env.norm)) { finalReply = reply('Okay, never mind.'); finalTrace = { how: 'context', label: 'Cancelled', confidence: 1 }; ctx.pending = null; }
+    else {
+      let r = null;
+      try { r = ctx.pending.fill(env); } catch { r = null; }
+      if (r) { finalReply = r; finalTrace = { how: 'context', label: 'Filled: ' + ctx.pending.slot, confidence: 1 }; ctx.pending = null; }
+    }
+  }
+
+  // 3. ordinary matching (also the fallback when a pending step didn't resolve things)
+  if (!finalReply) {
+    const matches = collectMatches(env, store);
+    for (const m of matches) {
+      if (m.score < THRESHOLD) break;
+      let r;
+      try { r = m.intent.run(env, m.hit); } catch { r = null; }
+      if (r) {
+        finalReply = r; finalRun = { intent: m.intent, env, hit: m.hit };
+        finalTrace = {
+          how: m.hit.how, label: m.intent.label, confidence: m.score,
+          matchedText: m.hit.matchedText, entities: { ...m.hit.entities, ...env.ent }
+        };
+        break;
+      }
+    }
+  }
+
+  // 4. still nothing? if a slot was pending, gently re-ask; otherwise the generic fallback
+  if (!finalReply) {
+    if (ctx.pending && ctx.pending.type === 'slot') {
+      finalReply = reply('I still need that to continue — or say **never mind** to drop it.');
+      finalTrace = { how: 'context', label: 'Waiting on: ' + ctx.pending.slot, confidence: 0.5 };
+    } else {
+      finalReply = fallbackReply(env);
+      finalTrace = { how: 'none', label: 'No rule matched', confidence: 0 };
+    }
+  }
+
+  if (finalRun) ctx.lastRun = finalRun;
+  ctx.lastReply = finalReply;
+  ctx.lastTrace = { raw: cleanedRaw, ...finalTrace };
+
+  return { reply: finalReply, trace: ctx.lastTrace };
+}
+
+/* ───────────── public API ───────────── */
+function create() {
+  const store = makeStore();
+  const ctx = { pending: null, lastRun: null, lastReply: null, lastTrace: null };
+  return {
+    version: VERSION,
+    send(message) { return respondTo(message, ctx, store); },
+    resetContext() { ctx.pending = null; ctx.lastRun = null; ctx.lastReply = null; ctx.lastTrace = null; },
+    getName: () => store.getName(),
+    todos: store.todos,
+    notes: store.notes,
+    custom: store.custom,
+    rulebook() {
+      return INTENTS.filter(i => !i.hidden).map(i => ({
+        id: i.id, label: i.label, category: i.category, blurb: i.blurb,
+        examples: i.examples, patternCount: i.patterns.length,
+        how: i.fn ? 'function' : i.patterns.length ? 'pattern' : i.keywords ? 'keywords' : 'context',
+        display: i.display || null
+      }));
+    },
+    stats() {
+      return { rules: INTENTS.filter(i => !i.hidden).length, patterns: INTENTS.reduce((a, i) => a + i.patterns.length, 0), custom: store.custom.list().length };
+    }
+  };
+}
+
+return { create, VERSION };
+})();
+
+if (typeof module !== 'undefined' && module.exports) module.exports = Parlance;
+
+</script>
+<script>
+/* ════════════════════════════════════════════════════════════════════
+   PARLANCE — front end. Talks to the engine, renders replies as
+   "blocks", keeps the inspector in sync, and hosts the rulebook and
+   teach-a-rule panels.
+   ════════════════════════════════════════════════════════════════════ */
+(() => {
+  'use strict';
+  const engine = Parlance.create();
+  const CAT_KEY = {
+    'Conversation': 'conversation', 'Time and date': 'time', 'Maths and units': 'maths',
+    'Focus and tasks': 'focus', 'Utilities': 'utilities', 'Fun': 'fun', 'Learn': 'learn'
+  };
+
+  const $ = (sel, root = document) => root.querySelector(sel);
+  const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+  const el = (tag, attrs = {}, ...kids) => {
+    const n = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (k === 'class') n.className = v;
+      else if (k === 'html') n.innerHTML = v;
+      else if (k.startsWith('on') && typeof v === 'function') n.addEventListener(k.slice(2), v);
+      else n.setAttribute(k, v);
+    }
+    for (const kid of kids) { if (kid == null) continue; n.append(kid.nodeType ? kid : document.createTextNode(kid)); }
+    return n;
+  };
+  const escapeHtml = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  function mdInline(s) {
+    let out = escapeHtml(String(s));
+    out = out.replace(/`([^`]+)`/g, '<code>$1</code>');
+    out = out.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    return out;
+  }
+  function tryCopy(text, btn) {
+    const done = () => { const old = btn.textContent; btn.textContent = 'Copied'; setTimeout(() => btn.textContent = old, 1200); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done).catch(() => {});
+    } else done();
+  }
+
+  /* ───────────── block renderers ───────────── */
+  const timers = []; // {el, end, seconds}
+  const clocks = []; // {el, tz}
+
+  const blockRenderers = {
+    text(b) { return el('p', { html: mdInline(b.v) }); },
+
+    kv(b) {
+      const table = el('table', { class: 'b-kv' });
+      for (const [k, v] of b.rows) table.append(el('tr', {}, el('td', {}, k), el('td', {}, v)));
+      return table;
+    },
+
+    result(b) {
+      const wrap = el('div', { class: 'b-result' + (b.small ? ' small' : '') });
+      wrap.append(el('div', { class: 'lbl' }, b.label));
+      const row = el('div', { class: 'row' }, el('span', { class: 'val' }, b.value));
+      if (b.copy) row.append(el('button', { class: 'copy-btn', type: 'button', onclick: e => tryCopy(String(b.value), e.target) }, 'Copy'));
+      wrap.append(row);
+      if (b.sub) wrap.append(el('div', { class: 'sub' }, b.sub));
+      return wrap;
+    },
+
+    list(b) {
+      const tag = b.ordered ? 'ol' : 'ul';
+      const list = el(tag, { class: 'b-list' });
+      for (const item of b.items) list.append(el('li', { html: mdInline(item) }));
+      return list;
+    },
+
+    help(b) {
+      const wrap = el('div', { class: 'b-help' });
+      for (const sec of b.sections) {
+        const s = el('div', { class: 'sec' });
+        s.append(el('div', { class: 'h' }, sec.title));
+        const row = el('div', { class: 'chip-row' });
+        for (const item of sec.items) row.append(el('button', { class: 'chip', type: 'button', onclick: () => send(item) }, item));
+        s.append(row);
+        wrap.append(s);
+      }
+      return wrap;
+    },
+
+    todos() {
+      const wrap = el('div', { class: 'b-todos' });
+      const paint = () => {
+        wrap.innerHTML = '';
+        const list = engine.todos.list();
+        if (!list.length) { wrap.append(el('div', { class: 'todo-empty' }, 'Nothing on the list.')); return; }
+        list.forEach(t => {
+          const row = el('div', { class: 'todo-row' + (t.done ? ' done' : '') });
+          const cb = el('input', { type: 'checkbox' }); cb.checked = t.done;
+          cb.addEventListener('change', () => { engine.todos.toggle(t.id); paint(); });
+          row.append(cb, el('span', {}, t.text));
+          row.append(el('button', { class: 'del', type: 'button', title: 'Remove', onclick: () => { engine.todos.remove(t.id); paint(); } }, '✕'));
+          wrap.append(row);
+        });
+      };
+      paint();
+      return wrap;
+    },
+
+    password(b) {
+      const wrap = el('div', { class: 'b-password' });
+      const val = el('div', { class: 'pw-value' }, b.value);
+      wrap.append(val);
+      const meta = el('div', { class: 'pw-meta' },
+        el('button', { class: 'copy-btn', type: 'button', onclick: e => tryCopy(b.value, e.target) }, 'Copy'),
+        el('span', {}, b.opts.length + ' characters'),
+        el('span', { class: 'pw-strength' }, b.label));
+      wrap.append(meta);
+      return wrap;
+    },
+
+    dice(b) {
+      const wrap = el('div', { class: 'b-dice' });
+      b.rolls.forEach(r => wrap.append(el('div', { class: 'die' }, String(r))));
+      wrap.append(el('span', { class: 'total' }, b.rolls.length > 1 ? `total ${b.total}` : ''));
+      return wrap;
+    },
+
+    coin(b) {
+      return el('div', { class: 'b-coin' }, el('div', { class: 'coin-face' }, b.side.toUpperCase()), el('span', {}, b.side));
+    },
+
+    color(b) {
+      return el('div', { class: 'b-color' },
+        el('div', { class: 'swatch', style: `background:${b.hex}` }),
+        el('div', { class: 'color-vals' },
+          el('div', {}, b.hex), el('div', {}, b.rgb), el('div', {}, b.hsl)));
+    },
+
+    clock(b) {
+      const wrap = el('div', { class: 'b-clock' });
+      const time = el('div', { class: 'clock-time' }, '--:--:--');
+      const meta = el('div', { class: 'clock-meta' }, `${b.label} · ${b.diff}`);
+      wrap.append(time, meta);
+      clocks.push({ el: time, tz: b.tz });
+      paintClocks();
+      return wrap;
+    },
+
+    timer(b) {
+      const wrap = el('div', { class: 'b-timer' });
+      const top = el('div', { class: 'timer-top' },
+        el('span', { class: 'timer-label' }, b.label),
+        el('span', { class: 'timer-count' }, fmtClock(b.seconds)));
+      const bar = el('div', { class: 'timer-bar' }, el('i', { style: 'width:100%' }));
+      wrap.append(top, bar);
+      timers.push({ wrap, top, bar, end: Date.now() + b.seconds * 1000, total: b.seconds, label: b.label, done: false });
+      return wrap;
+    }
+  };
+
+  function fmtClock(totalSec) {
+    totalSec = Math.max(0, Math.round(totalSec));
+    const h = Math.floor(totalSec / 3600), m = Math.floor((totalSec % 3600) / 60), s = totalSec % 60;
+    return h ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}` : `${m}:${String(s).padStart(2, '0')}`;
+  }
+  function paintClocks() {
+    for (const c of clocks) {
+      try {
+        c.el.textContent = new Date().toLocaleTimeString('en-GB', { timeZone: c.tz, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      } catch { c.el.textContent = new Date().toLocaleTimeString('en-GB'); }
+    }
+  }
+  function tickTimers() {
+    for (const t of timers) {
+      if (t.done) continue;
+      const remain = Math.max(0, t.end - Date.now());
+      const secs = Math.round(remain / 1000);
+      t.top.querySelector('.timer-count').textContent = secs > 0 ? fmtClock(secs) : 'Done';
+      t.bar.querySelector('i').style.width = Math.max(0, (remain / (t.total * 1000)) * 100) + '%';
+      if (remain <= 0) { t.done = true; t.wrap.classList.add('timer-done'); }
+    }
+  }
+  setInterval(() => { paintClocks(); tickTimers(); }, 1000);
+
+  /* ───────────── chat rendering ───────────── */
+  const log = $('#chatlog');
+  function scrollBottom() { log.scrollTop = log.scrollHeight; }
+
+  function renderChips(chips) {
+    if (!chips || !chips.length) return null;
+    const row = el('div', { class: 'chip-row' });
+    for (const c of chips) {
+      if (c.action) row.append(el('button', { class: 'chip', type: 'button', onclick: () => handleAction(c.action, c.arg) }, c.label));
+      else row.append(el('button', { class: 'chip', type: 'button', onclick: () => send(c.send) }, c.label));
+    }
+    return row;
+  }
+
+  function appendMessage(role, replyObj) {
+    const msg = el('div', { class: 'msg ' + role });
+    msg.append(el('div', { class: 'avatar' }, role === 'bot' ? 'P' : 'Y'));
+    const bubble = el('div', { class: 'bubble' });
+    if (role === 'bot' && replyObj.trace) bubble.style.borderLeftColor = catColor(replyObj.trace.label);
+    for (const b of replyObj.blocks) {
+      const render = blockRenderers[b.t];
+      if (render) bubble.append(render(b));
+    }
+    const chipRow = renderChips(replyObj.chips);
+    if (chipRow) bubble.append(chipRow);
+    msg.append(bubble);
+    log.append(msg);
+    scrollBottom();
+  }
+
+  function catColor(label) {
+    const rb = engine.rulebook().find(r => r.label === label);
+    const key = rb ? CAT_KEY[rb.category] : null;
+    return key ? `var(--cat-${key})` : 'var(--trace-soft)';
+  }
+
+  function showTyping() {
+    const msg = el('div', { class: 'msg bot', id: 'typing-msg' });
+    msg.append(el('div', { class: 'avatar' }, 'P'),
+      el('div', { class: 'bubble' }, el('div', { class: 'typing' }, el('span'), el('span'), el('span'))));
+    log.append(msg); scrollBottom();
+    return msg;
+  }
+
+  function send(text) {
+    text = (text || '').trim();
+    if (!text) return;
+    appendMessage('user', { blocks: [{ t: 'text', v: escapeUserEcho(text) }] });
+    const typingEl = showTyping();
+    const delay = 220 + Math.min(500, text.length * 6);
+    setTimeout(() => {
+      const { reply, trace } = engine.send(text);
+      typingEl.remove();
+      if (reply.action === 'clear') { log.innerHTML = ''; }
+      appendMessage('bot', { ...reply, trace });
+      updateInspector(trace);
+      refreshStats();
+    }, delay);
+  }
+  function escapeUserEcho(t) { return t.replace(/[*`]/g, c => '\\' + c); }
+
+  /* ───────────── inspector ───────────── */
+  const HOW_LABEL = { pattern: 'Regular-expression pattern', function: 'Matcher function', keywords: 'Keyword groups', context: 'Pending follow-up', custom: 'A rule you taught it', none: 'No rule cleared the threshold' };
+  function updateInspector(trace) {
+    const body = $('#insp-body');
+    $('#insp-dot').classList.add('live');
+    setTimeout(() => $('#insp-dot').classList.remove('live'), 900);
+    if (!trace) { body.innerHTML = '<p class="insp-empty">Nothing yet.</p>'; return; }
+    body.innerHTML = '';
+    const pct = Math.round((trace.confidence || 0) * 100);
+    body.append(
+      row('You said', `“${trace.raw}”`, true),
+      row('Matched rule', trace.label || '—'),
+      confRow(pct, trace.how === 'none'),
+      row('How it matched', HOW_LABEL[trace.how] || trace.how)
+    );
+    if (trace.matchedText) body.append(row('Matched text', trace.matchedText, true));
+    const ents = Object.entries(trace.entities || {}).filter(([, v]) => v != null && v !== '');
+    if (ents.length) {
+      const t = el('table', { class: 'ent-table' });
+      ents.forEach(([k, v]) => t.append(el('tr', {}, el('td', {}, k), el('td', {}, String(v)))));
+      const wrap = el('div', { class: 'insp-row' }, el('div', { class: 'k' }, 'entities found'), t);
+      body.append(wrap);
+    }
+    function row(k, v, mono) {
+      return el('div', { class: 'insp-row' }, el('div', { class: 'k' }, k.toLowerCase()), el('div', { class: 'v' + (mono ? ' mono' : '') }, v));
+    }
+    function confRow(pct, none) {
+      const bar = el('div', { class: 'conf-bar' + (none ? ' none' : '') }, el('i', { style: `width:${pct}%` }));
+      return el('div', { class: 'insp-row' }, el('div', { class: 'k' }, 'confidence'), el('div', { class: 'v' }, pct + '%'), bar);
+    }
+  }
+
+  function refreshStats() {
+    const s = engine.stats();
+    $('#stat-rules').textContent = s.rules;
+    $('#stat-patterns').textContent = s.patterns;
+    $('#stat-custom').textContent = s.custom;
+  }
+
+  /* ───────────── actions (teach / rules / inspector) ───────────── */
+  function handleAction(action) {
+    if (action === 'teach') openTeach();
+    else if (action === 'rules') openRulebook();
+    else if (action === 'inspector') { document.getElementById('inspector').scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
+  }
+
+  const overlayRoot = $('#overlay-root');
+  function closeSheet() { overlayRoot.innerHTML = ''; document.removeEventListener('keydown', escClose); }
+  function escClose(e) { if (e.key === 'Escape') closeSheet(); }
+  function openSheet(title, bodyEl) {
+    overlayRoot.innerHTML = '';
+    const backdrop = el('div', { class: 'sheet-backdrop', onclick: e => { if (e.target === backdrop) closeSheet(); } });
+    const sheet = el('div', { class: 'sheet' });
+    sheet.append(el('div', { class: 'sheet-head' }, el('h2', {}, title),
+      el('button', { class: 'sheet-close', type: 'button', 'aria-label': 'Close', onclick: closeSheet }, '✕')));
+    const body = el('div', { class: 'sheet-body' }); body.append(bodyEl);
+    sheet.append(body);
+    backdrop.append(sheet);
+    overlayRoot.append(backdrop);
+    document.addEventListener('keydown', escClose);
+  }
+
+  function openRulebook() {
+    const wrap = el('div');
+    const search = el('input', { class: 'rb-search', type: 'text', placeholder: 'Search rules…' });
+    wrap.append(search);
+    const listWrap = el('div');
+    wrap.append(listWrap);
+
+    function paint(filter) {
+      listWrap.innerHTML = '';
+      const q = (filter || '').toLowerCase().trim();
+      const rules = engine.rulebook().filter(r =>
+        !q || r.label.toLowerCase().includes(q) || (r.blurb || '').toLowerCase().includes(q) || (r.examples || []).some(e => e.toLowerCase().includes(q)));
+      const byCat = {};
+      rules.forEach(r => (byCat[r.category] = byCat[r.category] || []).push(r));
+      Object.entries(byCat).forEach(([cat, rs]) => {
+        const sec = el('div', { class: 'rb-cat' });
+        sec.append(el('h3', {}, cat));
+        rs.forEach(r => {
+          const row = el('div', { class: 'rb-rule' });
+          row.append(el('div', { class: 'lbl' }, r.label));
+          row.append(el('div', { class: 'blurb' }, r.blurb));
+          row.append(el('div', { class: 'how' }, r.how === 'pattern' ? `${r.patternCount} pattern${r.patternCount === 1 ? '' : 's'}` : r.how === 'function' ? 'matcher function' : r.how === 'keywords' ? 'keyword groups' : r.how));
+          if (r.display) row.append(el('div', { class: 'how' }, r.display));
+          if (r.examples && r.examples.length) {
+            const exRow = el('div', { class: 'ex-row' });
+            r.examples.forEach(ex => exRow.append(el('button', { class: 'chip', type: 'button', onclick: () => { closeSheet(); send(ex); } }, ex)));
+            row.append(exRow);
+          }
+          sec.append(row);
+        });
+        listWrap.append(sec);
+      });
+      const custom = engine.custom.list();
+      if (custom.length && !q) {
+        const sec = el('div', { class: 'rb-cat' });
+        sec.append(el('h3', {}, 'Taught by you'));
+        custom.forEach(c => {
+          const row = el('div', { class: 'rb-custom-row' });
+          row.append(el('div', {}, el('div', { class: 'trig' }, '“' + c.trigger + '”'), el('div', { class: 'resp' }, c.response)));
+          row.append(el('button', { class: 'btn ghost small', type: 'button', onclick: () => { engine.custom.remove(c.id); refreshStats(); paint(search.value); } }, 'Remove'));
+          sec.append(row);
+        });
+        listWrap.append(sec);
+      }
+      if (!rules.length && !custom.length) listWrap.append(el('p', { class: 'insp-empty' }, 'No rules match that search.'));
+    }
+    search.addEventListener('input', () => paint(search.value));
+    paint('');
+    openSheet('The rulebook', wrap);
+  }
+
+  function openTeach() {
+    const wrap = el('div');
+    wrap.append(el('p', { class: 'hint', style: 'margin-bottom:16px;' }, 'Give it a phrase to listen for and the reply to give back. A taught rule wins over ordinary rules whenever your phrase appears in the message.'));
+    const trigger = el('input', { type: 'text', placeholder: 'e.g. what is your favourite colour' });
+    const response = el('textarea', { rows: '3', placeholder: 'e.g. I like teal, if I had to pick.' });
+    wrap.append(
+      el('div', { class: 'field' }, el('label', {}, 'when someone says…'), trigger),
+      el('div', { class: 'field' }, el('label', {}, 'reply with…'), response),
+      el('button', { class: 'btn signal', type: 'button', onclick: () => {
+        if (!trigger.value.trim() || !response.value.trim()) return;
+        engine.custom.add(trigger.value, response.value);
+        refreshStats();
+        trigger.value = ''; response.value = '';
+        note.textContent = 'Taught. Try it in the chat, or open the rulebook to see it listed under “Taught by you.”';
+      } }, 'Teach this rule'));
+    const note = el('p', { class: 'hint' }, '');
+    wrap.append(note);
+    openSheet('Teach a new rule', wrap);
+  }
+
+  /* ───────────── wire up ───────────── */
+  $$('[data-open]').forEach(b => b.addEventListener('click', () => handleAction(b.dataset.open)));
+  $('#btn-clear').addEventListener('click', () => { log.innerHTML = ''; engine.resetContext(); });
+
+  $('#composer').addEventListener('submit', e => { e.preventDefault(); const i = $('#msg-input'); send(i.value); i.value = ''; });
+  $('#hero-form').addEventListener('submit', e => {
+    e.preventDefault(); const i = $('#hero-input');
+    if (i.value.trim()) { send(i.value); i.value = ''; document.getElementById('chat-panel').scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+  });
+
+  refreshStats();
+  const opening = engine.send('help');
+  appendMessage('bot', opening.reply);
+  updateInspector(opening.trace);
+})();
+
+</script>
+</body>
+</html>
